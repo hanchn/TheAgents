@@ -37,7 +37,7 @@ app.use((error, req, res, next) => {
 });
 
 async function bootstrap() {
-  await sequelize.sync();
+  await sequelize.sync({ alter: true });
   await seedIfNeeded();
 
   app.listen(port, () => {

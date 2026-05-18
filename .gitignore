@@ -8,3 +8,8 @@ web/dist/
 *.log
 .DS_Store
 
+server/src/data/
+server/src/data/*.sqlite
+server/src/data/*.sqlite-journal
+server/src/data/*.sqlite-shm
+server/src/data/*.sqlite-wal

@@ -28,6 +28,21 @@ const Agent = sequelize.define(
       allowNull: false,
       defaultValue: 'active',
     },
+    publishStatus: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'draft',
+    },
+    version: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
+    owner: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: '',
+    },
     endpoint: {
       type: DataTypes.STRING,
       allowNull: false,

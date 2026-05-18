@@ -12,6 +12,16 @@ app.use(express.json({ limit: '2mb' }));
 
 app.use((req, res, next) => {
   res.success = (data) => res.json({ success: true, data });
+  res.pageSuccess = (list, total, page, pageSize) =>
+    res.json({
+      success: true,
+      data: {
+        list,
+        total,
+        page,
+        pageSize,
+      },
+    });
   res.fail = (code, message) => res.status(code).json({ success: false, message });
   next();
 });

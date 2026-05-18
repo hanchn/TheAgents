@@ -62,6 +62,12 @@ const bindingForm = reactive({
   outputMappingText: '{\n  "answer": "$workflow.answer",\n  "route": "$workflow.route"\n}',
 })
 
+const chatAgentId = ref('')
+const chatInput = ref('')
+const chatLoading = ref(false)
+const chatTrace = ref([])
+const chatSessions = ref({})
+
 const statCards = computed(() => [
   {
     label: 'Agent',
@@ -102,6 +108,17 @@ const selectedNode = computed(
   () => flowNodes.value.find((item) => item.id === selectedNodeId.value) || null
 )
 
+const currentChatAgent = computed(
+  () => agents.value.find((item) => item.id === chatAgentId.value) || null
+)
+
+const currentChatBinding = computed(
+  () =>
+    bindings.value.find((item) => item.agentId === chatAgentId.value && item.status === 'enabled') || null
+)
+
+const currentChatMessages = computed(() => chatSessions.value[chatAgentId.value] || [])
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -119,6 +136,40 @@ function normalizeCode(text) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '-')
+}
+
+function ensureChatSession(agentId) {
+  if (!agentId || chatSessions.value[agentId]) {
+    return
+  }
+
+  chatSessions.value = {
+    ...chatSessions.value,
+    [agentId]: [
+      {
+        id: `welcome-${agentId}`,
+        role: 'assistant',
+        content: '已进入当前 Agent 调试会话，你可以直接发送一条消息测试它绑定的流程。',
+      },
+    ],
+  }
+}
+
+function pushChatMessage(agentId, role, content, meta = {}) {
+  const history = chatSessions.value[agentId] || []
+
+  chatSessions.value = {
+    ...chatSessions.value,
+    [agentId]: [
+      ...history,
+      {
+        id: `${role}-${Date.now()}-${history.length}`,
+        role,
+        content,
+        ...meta,
+      },
+    ],
+  }
 }
 
 function syncNodeForm(node) {
@@ -184,6 +235,9 @@ async function fetchAll() {
     }
     if (!bindingForm.workflowId && workflows.value.length > 0) {
       bindingForm.workflowId = workflows.value[0].id
+    }
+    if (!chatAgentId.value && agents.value.length > 0) {
+      chatAgentId.value = agents.value[0].id
     }
   } catch (error) {
     message.error('后端接口未就绪，请先启动 server 服务')
@@ -296,6 +350,42 @@ async function createBinding() {
   }
 }
 
+async function sendChatMessage() {
+  const messageText = chatInput.value.trim()
+  if (!chatAgentId.value) {
+    return message.warning('请先选择一个 Agent')
+  }
+  if (!messageText) {
+    return message.warning('请输入要发送的内容')
+  }
+
+  ensureChatSession(chatAgentId.value)
+  pushChatMessage(chatAgentId.value, 'user', messageText)
+  chatInput.value = ''
+  chatLoading.value = true
+
+  try {
+    const response = await client.post('/chat/simulate', {
+      agentId: chatAgentId.value,
+      message: messageText,
+    })
+
+    const payload = response.data.data
+    chatTrace.value = Array.isArray(payload.trace) ? payload.trace : []
+    pushChatMessage(chatAgentId.value, 'assistant', payload.reply, {
+      workflowName: payload.workflowName,
+    })
+  } catch (error) {
+    pushChatMessage(
+      chatAgentId.value,
+      'assistant',
+      error.response?.data?.message || '当前 Agent 对话模拟失败，请检查绑定关系'
+    )
+  } finally {
+    chatLoading.value = false
+  }
+}
+
 function addNode(kind) {
   const index = flowNodes.value.length + 1
   const node = {
@@ -383,6 +473,11 @@ watch(
     }
   }
 )
+
+watch(chatAgentId, () => {
+  ensureChatSession(chatAgentId.value)
+  chatTrace.value = []
+})
 
 onMounted(fetchAll)
 </script>
@@ -510,6 +605,77 @@ onMounted(fetchAll)
               </div>
             </div>
             <a-empty v-else description="暂无 Agent" />
+          </a-card>
+        </div>
+      </a-tab-pane>
+
+      <a-tab-pane key="chat" tab="对话调试台">
+        <div class="chat-layout">
+          <a-card title="切换 Agent" class="chat-side-card">
+            <a-select v-model:value="chatAgentId" :options="agentOptions" class="full-width" />
+            <div class="workflow-list">
+              <button
+                v-for="item in agents"
+                :key="item.id"
+                class="workflow-list-item"
+                :class="{ active: item.id === chatAgentId }"
+                @click="chatAgentId = item.id"
+              >
+                <strong>{{ item.name }}</strong>
+                <span>{{ item.type }} · {{ item.status }}</span>
+              </button>
+            </div>
+          </a-card>
+
+          <a-card title="会话窗口" class="chat-main-card">
+            <div class="chat-meta">
+              <div>
+                <strong>{{ currentChatAgent?.name || '未选择 Agent' }}</strong>
+                <span>
+                  当前流程：{{ currentChatBinding?.workflowName || '未绑定流程，请先去流程绑定台配置' }}
+                </span>
+              </div>
+              <a-tag :color="currentChatBinding ? 'blue' : 'default'">
+                {{ currentChatBinding?.mode || 'unbound' }}
+              </a-tag>
+            </div>
+
+            <div class="chat-window">
+              <div
+                v-for="item in currentChatMessages"
+                :key="item.id"
+                class="chat-message"
+                :class="item.role"
+              >
+                <span class="chat-role">{{ item.role === 'user' ? '我' : 'Agent' }}</span>
+                <div class="chat-bubble">
+                  <p>{{ item.content }}</p>
+                  <small v-if="item.workflowName">命中流程：{{ item.workflowName }}</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="chat-composer">
+              <a-textarea
+                v-model:value="chatInput"
+                :rows="4"
+                placeholder="输入一条用户消息，例如：帮我判断这个客户需求该走哪个流程"
+              />
+              <a-button type="primary" :loading="chatLoading" @click="sendChatMessage">
+                发送并走流程
+              </a-button>
+            </div>
+          </a-card>
+
+          <a-card title="流程轨迹" class="chat-side-card">
+            <div v-if="chatTrace.length" class="trace-list">
+              <div v-for="step in chatTrace" :key="step.nodeId" class="trace-item">
+                <strong>Step {{ step.step }} · {{ step.label }}</strong>
+                <span>{{ step.kind }}</span>
+                <p>{{ step.prompt }}</p>
+              </div>
+            </div>
+            <a-empty v-else description="发送消息后显示当前流程轨迹" />
           </a-card>
         </div>
       </a-tab-pane>

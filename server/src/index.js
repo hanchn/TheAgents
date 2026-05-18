@@ -36,8 +36,36 @@ app.use((error, req, res, next) => {
   });
 });
 
+async function ensureAgentSchema() {
+  const [columns] = await sequelize.query("PRAGMA table_info('agents')");
+  if (!Array.isArray(columns) || columns.length === 0) {
+    return;
+  }
+
+  const columnNames = new Set(columns.map((item) => item.name));
+
+  if (!columnNames.has('publishStatus')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN publishStatus VARCHAR(255) NOT NULL DEFAULT 'draft'"
+    );
+  }
+
+  if (!columnNames.has('version')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+    );
+  }
+
+  if (!columnNames.has('owner')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN owner VARCHAR(255) NOT NULL DEFAULT ''"
+    );
+  }
+}
+
 async function bootstrap() {
-  await sequelize.sync({ alter: true });
+  await sequelize.sync();
+  await ensureAgentSchema();
   await seedIfNeeded();
 
   app.listen(port, () => {

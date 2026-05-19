@@ -714,8 +714,12 @@ function onEdgeClick(eventOrPayload, edgePayload) {
 
 function onCanvasDoubleClick(event) {
   if (
+    event.target?.closest('.workflow-zoom-controls') ||
+    event.target?.closest('.workflow-canvas-toolbar') ||
+    event.target?.closest('.ant-card-head') ||
     event.target?.closest('.vue-flow__node') ||
     event.target?.closest('.vue-flow__edge') ||
+    !event.target?.closest('.vue-flow__pane') ||
     event.target?.closest('.workflow-context-menu') ||
     event.target?.closest('.workflow-hover-panel')
   ) {

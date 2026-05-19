@@ -401,25 +401,36 @@ select {
 .workflow-node-handle {
   width: 12px;
   height: 12px;
-  border: 2px solid #1677ff;
-  background: #fff;
+  border: 2px solid #91caff;
+  background: #e6f4ff;
   opacity: 0;
-  box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
+  box-shadow: 0 0 0 4px rgba(145, 202, 255, 0.18);
   transition:
     opacity 0.16s ease,
-    transform 0.16s ease,
     box-shadow 0.16s ease;
 }
 
 .workflow-engine-canvas .vue-flow__node:hover .workflow-node-handle,
-.workflow-engine-canvas .vue-flow__node.selected .workflow-node-handle {
+.workflow-engine-canvas .vue-flow__node.selected .workflow-node-handle,
+.workflow-node-handle:hover {
   opacity: 1;
 }
 
 .workflow-engine-canvas .vue-flow__node:hover .workflow-node-handle:hover,
 .workflow-engine-canvas .vue-flow__node.selected .workflow-node-handle:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 6px rgba(22, 119, 255, 0.18);
+  box-shadow: 0 0 0 4px rgba(145, 202, 255, 0.24);
+}
+
+.workflow-engine-canvas .workflow-node-start .workflow-node-handle {
+  border-color: #95de64;
+  background: #f6ffed;
+  box-shadow: 0 0 0 4px rgba(149, 222, 100, 0.18);
+}
+
+.workflow-engine-canvas .workflow-node-end .workflow-node-handle {
+  border-color: #ff7875;
+  background: #fff1f0;
+  box-shadow: 0 0 0 4px rgba(255, 120, 117, 0.16);
 }
 
 .workflow-engine-canvas .workflow-node-start.selected {

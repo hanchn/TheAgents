@@ -30,12 +30,15 @@ const flowNodes = ref([])
 const flowEdges = ref([])
 const bindingSaving = ref(false)
 const isPropertyPanelVisible = ref(false)
+const canvasShellRef = ref(null)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
 const createNodeContextMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
+  flowX: 0,
+  flowY: 0,
 })
 const nodeContextMenu = reactive({
   visible: false,
@@ -250,6 +253,28 @@ function applyHorizontalPositions(nodes = []) {
   }))
 }
 
+function getCanvasFlowPosition(event) {
+  const canvasElement = canvasShellRef.value?.querySelector('.workflow-engine-canvas')
+  const transformPane = canvasShellRef.value?.querySelector('.vue-flow__transformationpane')
+
+  if (!canvasElement) {
+    return { x: NODE_START_X, y: NODE_CANVAS_Y }
+  }
+
+  const canvasRect = canvasElement.getBoundingClientRect()
+  const transformValue = transformPane ? getComputedStyle(transformPane).transform : 'none'
+  const matrix =
+    transformValue && transformValue !== 'none'
+      ? new DOMMatrixReadOnly(transformValue)
+      : new DOMMatrixReadOnly()
+  const zoom = matrix.a || 1
+
+  return {
+    x: Math.max(40, (event.clientX - canvasRect.left - matrix.m41) / zoom),
+    y: Math.max(40, (event.clientY - canvasRect.top - matrix.m42) / zoom),
+  }
+}
+
 function openCreateNodeContextMenu(event) {
   if (
     event.target?.closest('.vue-flow__node') ||
@@ -262,9 +287,12 @@ function openCreateNodeContextMenu(event) {
 
   event.preventDefault()
   event.stopPropagation()
+  const flowPosition = getCanvasFlowPosition(event)
   createNodeContextMenu.visible = true
   createNodeContextMenu.x = event.clientX
   createNodeContextMenu.y = event.clientY
+  createNodeContextMenu.flowX = flowPosition.x
+  createNodeContextMenu.flowY = flowPosition.y
   closeNodeContextMenu()
 }
 
@@ -272,6 +300,8 @@ function closeCreateNodeContextMenu() {
   createNodeContextMenu.visible = false
   createNodeContextMenu.x = 0
   createNodeContextMenu.y = 0
+  createNodeContextMenu.flowX = 0
+  createNodeContextMenu.flowY = 0
 }
 
 function openPropertyPanel({ pinned = false } = {}) {
@@ -488,25 +518,35 @@ async function loadBindings() {
   }
 }
 
-function addNode(kind) {
+function addNode(kind, options = {}) {
   const businessNodes = flowNodes.value.filter((node) => !['start', 'end'].includes(node.data?.kind))
   const index = businessNodes.length + 1
   const lastBusinessNode = businessNodes[businessNodes.length - 1]
+  const hasCustomPosition = typeof options.x === 'number' && typeof options.y === 'number'
   const node = {
     id: `node-${Date.now()}`,
     type: 'default',
     position: {
-      x: NODE_START_X + index * NODE_GAP_X,
-      y: NODE_CANVAS_Y,
+      x: hasCustomPosition ? options.x : NODE_START_X + index * NODE_GAP_X,
+      y: hasCustomPosition ? options.y : NODE_CANVAS_Y,
     },
     class: 'workflow-node-default',
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
     data: {
-      label: `${kind}-${index}`,
+      label: hasCustomPosition ? `新节点-${index}` : `${kind}-${index}`,
       kind,
       prompt: `配置 ${kind} 节点逻辑`,
     },
+  }
+
+  if (hasCustomPosition) {
+    flowNodes.value = [...flowNodes.value, normalizeNode(node)]
+    syncNodeForm(node)
+    setSelectedNode(node.id)
+    openPropertyPanel()
+    closeCreateNodeContextMenu()
+    return
   }
 
   const nextNodes = [...flowNodes.value, node]
@@ -531,6 +571,13 @@ function addNode(kind) {
   syncNodeForm(flowNodes.value.find((item) => item.id === node.id) || null)
   setSelectedNode(node.id)
   closeCreateNodeContextMenu()
+}
+
+function addNodeAtContextPosition(kind) {
+  addNode(kind, {
+    x: createNodeContextMenu.flowX,
+    y: createNodeContextMenu.flowY,
+  })
 }
 
 function addChildNode() {
@@ -625,6 +672,20 @@ function onEdgeClick(eventOrPayload, edgePayload) {
   closeCreateNodeContextMenu()
   openPropertyPanel()
   closeNodeContextMenu()
+}
+
+function onCanvasDoubleClick(event) {
+  if (
+    event.target?.closest('.vue-flow__node') ||
+    event.target?.closest('.vue-flow__edge') ||
+    event.target?.closest('.workflow-context-menu') ||
+    event.target?.closest('.workflow-hover-panel')
+  ) {
+    return
+  }
+
+  const flowPosition = getCanvasFlowPosition(event)
+  addNode('tool', flowPosition)
 }
 
 function clearSelectedNode() {
@@ -969,7 +1030,12 @@ onMounted(async () => {
           </div>
         </template>
 
-        <div class="workflow-canvas-shell" @contextmenu="openCreateNodeContextMenu">
+        <div
+          ref="canvasShellRef"
+          class="workflow-canvas-shell"
+          @contextmenu="openCreateNodeContextMenu"
+          @dblclick="onCanvasDoubleClick"
+        >
           <div class="workflow-canvas-toolbar">
             <span>{{ currentWorkflow?.name || '未选择流程' }}</span>
             <span>{{ currentWorkflow?.status || 'draft' }}</span>
@@ -983,7 +1049,7 @@ onMounted(async () => {
               v-for="item in palette"
               :key="item.kind"
               type="button"
-              @click="addNode(item.kind)"
+              @click="addNodeAtContextPosition(item.kind)"
             >
               {{ item.label }}
             </button>

@@ -76,6 +76,7 @@ const palette = [
 const NODE_START_X = 80
 const NODE_GAP_X = 250
 const NODE_CANVAS_Y = 220
+const NODE_ROW_GAP_Y = 170
 
 function createStartNode() {
   return {
@@ -223,14 +224,46 @@ function normalizeNode(node) {
   }
 }
 
-function createEdge(source, target, label = 'next') {
+function normalizeEdgeLabel(label = '') {
+  const text = `${label || ''}`.trim()
+  if (['next', '进入节点', '进入子节点', '开始执行', '结束流程'].includes(text)) {
+    return ''
+  }
+  return text
+}
+
+function createEdge(source, target, label = '', options = {}) {
   return {
     id: `edge-${source}-${target}`,
     source,
     target,
-    label,
+    sourceHandle: options.sourceHandle,
+    targetHandle: options.targetHandle,
+    label: normalizeEdgeLabel(label),
     type: 'smoothstep',
-    markerEnd: MarkerType.ArrowClosed,
+    style: {
+      stroke: '#6b8cff',
+      strokeWidth: 2.5,
+    },
+    labelShowBg: Boolean(normalizeEdgeLabel(label)),
+    labelBgPadding: [6, 4],
+    labelBgBorderRadius: 8,
+    labelBgStyle: {
+      fill: '#ffffff',
+      stroke: '#dbe4ff',
+      strokeWidth: 1,
+    },
+    labelStyle: {
+      fill: '#3557d6',
+      fontSize: 12,
+      fontWeight: 600,
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 20,
+      height: 20,
+      color: '#6b8cff',
+    },
   }
 }
 
@@ -244,14 +277,132 @@ function sortBusinessNodes(nodes = []) {
   })
 }
 
-function applyHorizontalPositions(nodes = []) {
-  return nodes.map((node, index) => ({
+function layoutNodesByGraph(nodes = [], edges = []) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
+  const outgoingMap = new Map()
+  const incomingMap = new Map()
+
+  edges.forEach((edge) => {
+    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) {
+      return
+    }
+
+    if (!outgoingMap.has(edge.source)) {
+      outgoingMap.set(edge.source, [])
+    }
+    if (!incomingMap.has(edge.target)) {
+      incomingMap.set(edge.target, [])
+    }
+
+    outgoingMap.get(edge.source).push(edge)
+    incomingMap.get(edge.target).push(edge)
+  })
+
+  const depthMap = new Map([['node-start', 0]])
+  const queue = ['node-start']
+
+  while (queue.length) {
+    const currentId = queue.shift()
+    const currentDepth = depthMap.get(currentId) || 0
+    const outgoingEdges = outgoingMap.get(currentId) || []
+
+    outgoingEdges.forEach((edge) => {
+      if (!depthMap.has(edge.target) || (depthMap.get(edge.target) || 0) < currentDepth + 1) {
+        depthMap.set(edge.target, currentDepth + 1)
+        queue.push(edge.target)
+      }
+    })
+  }
+
+  const reachableDepths = [...depthMap.values()]
+  let fallbackDepth = reachableDepths.length ? Math.max(...reachableDepths) + 1 : 1
+  sortBusinessNodes(nodes.filter((node) => !depthMap.has(node.id))).forEach((node) => {
+    depthMap.set(node.id, fallbackDepth)
+    fallbackDepth += 1
+  })
+
+  const depthGroups = new Map()
+  nodes.forEach((node) => {
+    const depth = depthMap.get(node.id) ?? 0
+    if (!depthGroups.has(depth)) {
+      depthGroups.set(depth, [])
+    }
+    depthGroups.get(depth).push(node)
+  })
+
+  const rowMap = new Map([['node-start', 0]])
+  const sortedDepths = [...depthGroups.keys()].sort((left, right) => left - right)
+
+  sortedDepths.forEach((depth) => {
+    if (depth === 0) {
+      return
+    }
+
+    const group = depthGroups.get(depth) || []
+    const rankedGroup = [...group].sort((left, right) => {
+      const leftParents = incomingMap.get(left.id) || []
+      const rightParents = incomingMap.get(right.id) || []
+      const leftScore =
+        leftParents.reduce((sum, edge) => sum + (rowMap.get(edge.source) ?? 0), 0) /
+          Math.max(leftParents.length, 1) || 0
+      const rightScore =
+        rightParents.reduce((sum, edge) => sum + (rowMap.get(edge.source) ?? 0), 0) /
+          Math.max(rightParents.length, 1) || 0
+
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore
+      }
+
+      return (left.position?.y || 0) - (right.position?.y || 0)
+    })
+
+    const center = (rankedGroup.length - 1) / 2
+    rankedGroup.forEach((node, index) => {
+      rowMap.set(node.id, index - center)
+    })
+  })
+
+  return nodes.map((node) => ({
     ...node,
     position: {
-      x: NODE_START_X + index * NODE_GAP_X,
-      y: NODE_CANVAS_Y,
+      x: NODE_START_X + (depthMap.get(node.id) ?? 0) * NODE_GAP_X,
+      y: NODE_CANVAS_Y + (rowMap.get(node.id) ?? 0) * NODE_ROW_GAP_Y,
     },
   }))
+}
+
+function resolveEdgeHandles(sourceNode, targetNode) {
+  if (!sourceNode || !targetNode) {
+    return {
+      sourceHandle: 'source-right',
+      targetHandle: 'target-left',
+    }
+  }
+
+  const xDiff = (targetNode.position?.x || 0) - (sourceNode.position?.x || 0)
+  const yDiff = (targetNode.position?.y || 0) - (sourceNode.position?.y || 0)
+
+  if (Math.abs(yDiff) > Math.abs(xDiff)) {
+    return yDiff >= 0
+      ? {
+          sourceHandle: 'source-bottom',
+          targetHandle: 'target-top',
+        }
+      : {
+          sourceHandle: 'source-top',
+          targetHandle: 'target-bottom',
+        }
+  }
+
+  return xDiff >= 0
+    ? {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      }
+    : {
+        sourceHandle: 'source-left',
+        targetHandle: 'target-right',
+      }
 }
 
 function getCanvasFlowPosition(event) {
@@ -418,10 +569,15 @@ function ensureSystemNodes(nodes = [], edges = []) {
     draggable: false,
   })
 
-  const orderedNodes = applyHorizontalPositions([startNode, ...businessNodes, endNode])
+  const orderedNodes = [startNode, ...businessNodes, endNode]
   const validNodeIds = new Set(orderedNodes.map((node) => node.id))
   let nextEdges = edges
-    .map((edge) => createEdge(edge.source, edge.target, edge.label || 'next'))
+    .map((edge) =>
+      createEdge(edge.source, edge.target, edge.label || '', {
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+      })
+    )
     .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target))
     .filter((edge) => edge.target !== 'node-start' && edge.source !== 'node-end')
     .filter((edge) => edge.source !== edge.target)
@@ -438,7 +594,12 @@ function ensureSystemNodes(nodes = [], edges = []) {
   const lastBusinessNode = [...orderedNodes].reverse().find((node) => node.id !== 'node-start' && node.id !== 'node-end')
 
   if (!firstBusinessNode && !lastBusinessNode) {
-    nextEdges = [createEdge('node-start', 'node-end', '结束流程')]
+    nextEdges = [
+      createEdge('node-start', 'node-end', '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      }),
+    ]
   }
 
   if (firstBusinessNode) {
@@ -446,16 +607,34 @@ function ensureSystemNodes(nodes = [], edges = []) {
   }
 
   if (firstBusinessNode && !hasStartEdge) {
-    nextEdges.unshift(createEdge('node-start', firstBusinessNode.id, '开始执行'))
+    nextEdges.unshift(
+      createEdge('node-start', firstBusinessNode.id, '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      })
+    )
   }
 
   if (lastBusinessNode && !hasEndEdge) {
-    nextEdges.push(createEdge(lastBusinessNode.id, 'node-end', '结束流程'))
+    nextEdges.push(
+      createEdge(lastBusinessNode.id, 'node-end', '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      })
+    )
   }
 
+  const positionedNodes = layoutNodesByGraph(orderedNodes, nextEdges)
+  const positionedNodeMap = new Map(positionedNodes.map((node) => [node.id, node]))
+  const normalizedEdges = nextEdges.map((edge) =>
+    createEdge(edge.source, edge.target, edge.label || '', {
+      ...resolveEdgeHandles(positionedNodeMap.get(edge.source), positionedNodeMap.get(edge.target)),
+    })
+  )
+
   return {
-    nodes: orderedNodes,
-    edges: nextEdges,
+    nodes: positionedNodes,
+    edges: normalizedEdges,
   }
 }
 
@@ -597,11 +776,26 @@ function addNode(kind, options = {}) {
   )
 
   if (lastBusinessNode) {
-    nextEdges.push(createEdge(lastBusinessNode.id, node.id, '进入节点'))
+    nextEdges.push(
+      createEdge(lastBusinessNode.id, node.id, '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      })
+    )
   } else {
-    nextEdges.push(createEdge('node-start', node.id, '开始执行'))
+    nextEdges.push(
+      createEdge('node-start', node.id, '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      })
+    )
   }
-  nextEdges.push(createEdge(node.id, 'node-end', '结束流程'))
+  nextEdges.push(
+    createEdge(node.id, 'node-end', '', {
+      sourceHandle: 'source-right',
+      targetHandle: 'target-left',
+    })
+  )
 
   const normalized = ensureSystemNodes(nextNodes, nextEdges)
   flowNodes.value = normalized.nodes
@@ -644,14 +838,29 @@ function addChildNode() {
 
   const outgoingEdges = flowEdges.value.filter((edge) => edge.source === selectedNode.value.id)
   const nextEdges = flowEdges.value.filter((edge) => edge.source !== selectedNode.value.id)
-  nextEdges.push(createEdge(selectedNode.value.id, childId, '进入子节点'))
+  nextEdges.push(
+    createEdge(selectedNode.value.id, childId, '', {
+      sourceHandle: 'source-bottom',
+      targetHandle: 'target-top',
+    })
+  )
 
   if (outgoingEdges.length) {
     outgoingEdges.forEach((edge) => {
-      nextEdges.push(createEdge(childId, edge.target, edge.label || 'next'))
+      nextEdges.push(
+        createEdge(childId, edge.target, edge.label || '', {
+          sourceHandle: 'source-right',
+          targetHandle: edge.targetHandle || 'target-left',
+        })
+      )
     })
   } else {
-    nextEdges.push(createEdge(childId, 'node-end', '结束流程'))
+    nextEdges.push(
+      createEdge(childId, 'node-end', '', {
+        sourceHandle: 'source-right',
+        targetHandle: 'target-left',
+      })
+    )
   }
 
   const normalized = ensureSystemNodes([...flowNodes.value, childNode], nextEdges)
@@ -679,8 +888,15 @@ function onConnect(connection) {
     ...flowEdges.value.filter(
       (edge) => !(edge.source === connection.source && edge.target === connection.target)
     ),
-    createEdge(connection.source, connection.target),
+    createEdge(connection.source, connection.target, '', {
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+    }),
   ]
+
+  const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
 }
 
 function layoutNodesHorizontally() {
@@ -831,13 +1047,23 @@ function removeNodeById(nodeId) {
     incomingEdges.forEach((incomingEdge) => {
       outgoingEdges.forEach((outgoingEdge) => {
         if (incomingEdge.source !== outgoingEdge.target) {
-          remainingEdges.push(createEdge(incomingEdge.source, outgoingEdge.target, outgoingEdge.label || incomingEdge.label || 'next'))
+          remainingEdges.push(
+            createEdge(incomingEdge.source, outgoingEdge.target, outgoingEdge.label || incomingEdge.label || '', {
+              sourceHandle: incomingEdge.sourceHandle || 'source-right',
+              targetHandle: outgoingEdge.targetHandle || 'target-left',
+            })
+          )
         }
       })
     })
   } else if (incomingEdges.length && !outgoingEdges.length) {
     incomingEdges.forEach((incomingEdge) => {
-      remainingEdges.push(createEdge(incomingEdge.source, 'node-end', incomingEdge.label || '结束流程'))
+      remainingEdges.push(
+        createEdge(incomingEdge.source, 'node-end', incomingEdge.label || '', {
+          sourceHandle: 'source-right',
+          targetHandle: 'target-left',
+        })
+      )
     })
   }
 
@@ -899,10 +1125,6 @@ function updateSelectedEdge() {
   }
 
   const nextLabel = edgeForm.label.trim()
-  if (!nextLabel) {
-    return message.warning('连线文案不能为空')
-  }
-
   flowEdges.value = flowEdges.value.map((edge) =>
     edge.id === selectedEdgeId.value
       ? {

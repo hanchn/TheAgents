@@ -456,6 +456,52 @@ select {
   border: 1px solid #f0f0f0;
 }
 
+.workflow-zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.workflow-zoom-button,
+.workflow-zoom-percentage {
+  min-width: 68px;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  cursor: pointer;
+}
+
+.workflow-zoom-button + .workflow-zoom-percentage,
+.workflow-zoom-percentage + .workflow-zoom-button {
+  border-top: 1px solid #f0f0f0;
+}
+
+.workflow-zoom-button {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.workflow-zoom-percentage {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workflow-zoom-button:hover,
+.workflow-zoom-percentage:hover {
+  background: #f8fafc;
+}
+
 .workflow-floating-actions {
   position: absolute;
   top: 16px;

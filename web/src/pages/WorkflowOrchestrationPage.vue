@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import { Background } from '@vue-flow/background'
-import { Controls } from '@vue-flow/controls'
 import { ConnectionLineType, Handle, MarkerType, Position, VueFlow } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
 import {
@@ -31,6 +30,8 @@ const flowEdges = ref([])
 const bindingSaving = ref(false)
 const isPropertyPanelVisible = ref(false)
 const canvasShellRef = ref(null)
+const vueFlowStore = ref(null)
+const zoomPercentage = ref(100)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
 const createNodeContextMenu = reactive({
@@ -310,6 +311,43 @@ function openPropertyPanel({ pinned = false } = {}) {
 
 function closePropertyPanel() {
   isPropertyPanelVisible.value = false
+}
+
+function syncZoomPercentage(viewport) {
+  zoomPercentage.value = Math.round((viewport?.zoom ?? viewport?.z ?? 1) * 100)
+}
+
+function onPaneReady(store) {
+  vueFlowStore.value = store
+  syncZoomPercentage(store?.viewport)
+}
+
+function onViewportChange(viewport) {
+  syncZoomPercentage(viewport)
+}
+
+async function zoomInCanvas() {
+  await vueFlowStore.value?.zoomIn?.({ duration: 120 })
+}
+
+async function zoomOutCanvas() {
+  await vueFlowStore.value?.zoomOut?.({ duration: 120 })
+}
+
+async function resetZoomCanvas() {
+  const viewport = vueFlowStore.value?.viewport
+  if (!viewport || !vueFlowStore.value?.setViewport) {
+    return
+  }
+
+  await vueFlowStore.value.setViewport(
+    {
+      x: viewport.x,
+      y: viewport.y,
+      zoom: 1,
+    },
+    { duration: 120 }
+  )
 }
 
 function setSelectedNode(nodeId = '') {
@@ -1054,6 +1092,13 @@ onMounted(async () => {
               {{ item.label }}
             </button>
           </div>
+          <div class="workflow-zoom-controls">
+            <button type="button" class="workflow-zoom-button" @click="zoomInCanvas">+</button>
+            <button type="button" class="workflow-zoom-percentage" @click="resetZoomCanvas">
+              {{ zoomPercentage }}%
+            </button>
+            <button type="button" class="workflow-zoom-button" @click="zoomOutCanvas">-</button>
+          </div>
           <div
             v-if="(selectedNode || selectedEdge) && isPropertyPanelVisible"
             class="workflow-hover-panel workflow-hover-panel-right"
@@ -1114,6 +1159,9 @@ onMounted(async () => {
               markerEnd: MarkerType.ArrowClosed,
             }"
             :connection-line-type="ConnectionLineType.SmoothStep"
+            :zoom-on-double-click="false"
+            @pane-ready="onPaneReady"
+            @viewport-change="onViewportChange"
             @connect="onConnect"
             @node-click="onNodeClick"
             @edge-click="onEdgeClick"
@@ -1199,7 +1247,6 @@ onMounted(async () => {
             </template>
             <Background />
             <MiniMap />
-            <Controls />
           </VueFlow>
           <div
             v-if="nodeContextMenu.visible"

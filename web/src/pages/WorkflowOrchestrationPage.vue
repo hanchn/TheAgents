@@ -25,10 +25,13 @@ const bindings = ref([])
 const selectedWorkflowId = ref('')
 const selectedAgentId = ref('')
 const selectedNodeId = ref('')
+const selectedEdgeId = ref('')
 const flowNodes = ref([])
 const flowEdges = ref([])
 const bindingSaving = ref(false)
-const isEditorFullscreen = ref(false)
+const isPaletteVisible = ref(false)
+const isPalettePinned = ref(false)
+const isPropertyPanelVisible = ref(false)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
 const nodeContextMenu = reactive({
@@ -51,6 +54,10 @@ const nodeForm = reactive({
   prompt: '',
 })
 
+const edgeForm = reactive({
+  label: '',
+})
+
 const palette = [
   { label: '触发器', kind: 'trigger' },
   { label: 'AI 节点', kind: 'ai' },
@@ -58,6 +65,10 @@ const palette = [
   { label: '工具节点', kind: 'tool' },
   { label: '输出节点', kind: 'output' },
 ]
+
+const NODE_START_X = 80
+const NODE_GAP_X = 250
+const NODE_CANVAS_Y = 220
 
 function createStartNode() {
   return {
@@ -178,6 +189,9 @@ const currentBinding = computed(
 const selectedNode = computed(
   () => flowNodes.value.find((item) => item.id === selectedNodeId.value) || null
 )
+const selectedEdge = computed(
+  () => flowEdges.value.find((item) => item.id === selectedEdgeId.value) || null
+)
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -202,53 +216,170 @@ function normalizeNode(node) {
   }
 }
 
+function createEdge(source, target, label = 'next') {
+  return {
+    id: `edge-${source}-${target}`,
+    source,
+    target,
+    label,
+    type: 'smoothstep',
+    markerEnd: MarkerType.ArrowClosed,
+  }
+}
+
+function sortBusinessNodes(nodes = []) {
+  return [...nodes].sort((left, right) => {
+    const xDiff = (left.position?.x || 0) - (right.position?.x || 0)
+    if (xDiff !== 0) {
+      return xDiff
+    }
+    return (left.position?.y || 0) - (right.position?.y || 0)
+  })
+}
+
+function applyHorizontalPositions(nodes = []) {
+  return nodes.map((node, index) => ({
+    ...node,
+    position: {
+      x: NODE_START_X + index * NODE_GAP_X,
+      y: NODE_CANVAS_Y,
+    },
+  }))
+}
+
+function openPalettePanel({ pinned = false } = {}) {
+  isPaletteVisible.value = true
+  if (pinned) {
+    isPalettePinned.value = true
+  }
+}
+
+function closePalettePanel() {
+  if (!isPalettePinned.value) {
+    isPaletteVisible.value = false
+  }
+}
+
+function togglePalettePanel() {
+  if (isPaletteVisible.value && isPalettePinned.value) {
+    isPalettePinned.value = false
+    isPaletteVisible.value = false
+    return
+  }
+
+  isPaletteVisible.value = true
+  isPalettePinned.value = true
+}
+
+function openPropertyPanel({ pinned = false } = {}) {
+  isPropertyPanelVisible.value = true
+}
+
+function closePropertyPanel() {
+  isPropertyPanelVisible.value = false
+}
+
 function setSelectedNode(nodeId = '') {
   selectedNodeId.value = nodeId
   flowNodes.value = flowNodes.value.map((node) => ({
     ...node,
     selected: node.id === nodeId,
   }))
+  if (nodeId) {
+    setSelectedEdge('')
+  }
+}
+
+function setSelectedEdge(edgeId = '') {
+  selectedEdgeId.value = edgeId
+  flowEdges.value = flowEdges.value.map((edge) => ({
+    ...edge,
+    selected: edge.id === edgeId,
+  }))
+  if (edgeId) {
+    selectedNodeId.value = ''
+    flowNodes.value = flowNodes.value.map((node) => ({
+      ...node,
+      selected: false,
+    }))
+  }
 }
 
 function ensureSystemNodes(nodes = [], edges = []) {
   const normalizedNodes = nodes.map((node) => normalizeNode(clone(node)))
-  const nextNodes = normalizedNodes.filter((node) => node.id !== 'node-start' && node.id !== 'node-end')
-  const startNode = normalizedNodes.find((node) => node.id === 'node-start') || createStartNode()
-  const endNode = normalizedNodes.find((node) => node.id === 'node-end') || createEndNode()
+  const startSeed =
+    normalizedNodes.find((node) => node.id === 'node-start') ||
+    normalizedNodes.find((node) => node.data?.kind === 'start')
+  const endSeed =
+    normalizedNodes.find((node) => node.id === 'node-end') ||
+    normalizedNodes.find((node) => node.data?.kind === 'end')
+  const businessNodes = sortBusinessNodes(
+    normalizedNodes.filter(
+      (node) =>
+        node.id !== 'node-start' &&
+        node.id !== 'node-end' &&
+        node.data?.kind !== 'start' &&
+        node.data?.kind !== 'end'
+    )
+  ).map((node) => normalizeNode(node))
+  const startNode = normalizeNode({
+    ...createStartNode(),
+    ...startSeed,
+    id: 'node-start',
+    data: {
+      ...createStartNode().data,
+      ...(startSeed?.data || {}),
+      label: '开始',
+      kind: 'start',
+    },
+    draggable: false,
+  })
+  const endNode = normalizeNode({
+    ...createEndNode(),
+    ...endSeed,
+    id: 'node-end',
+    data: {
+      ...createEndNode().data,
+      ...(endSeed?.data || {}),
+      label: '结束',
+      kind: 'end',
+    },
+    draggable: false,
+  })
 
-  const orderedNodes = [normalizeNode(startNode), ...nextNodes, normalizeNode(endNode)]
+  const orderedNodes = applyHorizontalPositions([startNode, ...businessNodes, endNode])
   const validNodeIds = new Set(orderedNodes.map((node) => node.id))
   let nextEdges = edges
-    .map((edge) => ({
-      ...clone(edge),
-      markerEnd: MarkerType.ArrowClosed,
-    }))
+    .map((edge) => createEdge(edge.source, edge.target, edge.label || 'next'))
     .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target))
     .filter((edge) => edge.target !== 'node-start' && edge.source !== 'node-end')
+    .filter((edge) => edge.source !== edge.target)
+
+  const uniqueEdgeMap = new Map()
+  nextEdges.forEach((edge) => {
+    uniqueEdgeMap.set(`${edge.source}-${edge.target}`, edge)
+  })
+  nextEdges = [...uniqueEdgeMap.values()]
 
   const hasStartEdge = nextEdges.some((edge) => edge.source === 'node-start')
   const hasEndEdge = nextEdges.some((edge) => edge.target === 'node-end')
   const firstBusinessNode = orderedNodes.find((node) => node.id !== 'node-start' && node.id !== 'node-end')
   const lastBusinessNode = [...orderedNodes].reverse().find((node) => node.id !== 'node-start' && node.id !== 'node-end')
 
+  if (!firstBusinessNode && !lastBusinessNode) {
+    nextEdges = [createEdge('node-start', 'node-end', '结束流程')]
+  }
+
+  if (firstBusinessNode) {
+    nextEdges = nextEdges.filter((edge) => !(edge.source === 'node-start' && edge.target === 'node-end'))
+  }
+
   if (firstBusinessNode && !hasStartEdge) {
-    nextEdges.unshift({
-      id: `edge-start-${firstBusinessNode.id}`,
-      source: 'node-start',
-      target: firstBusinessNode.id,
-      label: '开始执行',
-      markerEnd: MarkerType.ArrowClosed,
-    })
+    nextEdges.unshift(createEdge('node-start', firstBusinessNode.id, '开始执行'))
   }
 
   if (lastBusinessNode && !hasEndEdge) {
-    nextEdges.push({
-      id: `edge-${lastBusinessNode.id}-end`,
-      source: lastBusinessNode.id,
-      target: 'node-end',
-      label: '结束流程',
-      markerEnd: MarkerType.ArrowClosed,
-    })
+    nextEdges.push(createEdge(lastBusinessNode.id, 'node-end', '结束流程'))
   }
 
   return {
@@ -302,6 +433,10 @@ function syncNodeForm(node) {
   nodeForm.prompt = node.data?.prompt || ''
 }
 
+function syncEdgeForm(edge) {
+  edgeForm.label = edge?.label || ''
+}
+
 async function loadWorkflows() {
   loading.value = true
 
@@ -353,13 +488,13 @@ async function loadBindings() {
 function addNode(kind) {
   const businessNodes = flowNodes.value.filter((node) => !['start', 'end'].includes(node.data?.kind))
   const index = businessNodes.length + 1
-  const endNode = flowNodes.value.find((node) => node.id === 'node-end')
+  const lastBusinessNode = businessNodes[businessNodes.length - 1]
   const node = {
     id: `node-${Date.now()}`,
     type: 'default',
     position: {
-      x: 320 + ((index - 1) % 2) * 260,
-      y: 120 + Math.floor((index - 1) / 2) * 140,
+      x: NODE_START_X + index * NODE_GAP_X,
+      y: NODE_CANVAS_Y,
     },
     class: 'workflow-node-default',
     sourcePosition: Position.Right,
@@ -371,9 +506,26 @@ function addNode(kind) {
     },
   }
 
-  const nodesWithoutEnd = flowNodes.value.filter((item) => item.id !== 'node-end')
-  flowNodes.value = [...nodesWithoutEnd, node, endNode || createEndNode()]
-  syncNodeForm(node)
+  const nextNodes = [...flowNodes.value, node]
+  const nextEdges = flowEdges.value.filter(
+    (edge) =>
+      !(
+        (lastBusinessNode && edge.source === lastBusinessNode.id && edge.target === 'node-end') ||
+        (!lastBusinessNode && edge.source === 'node-start' && edge.target === 'node-end')
+      )
+  )
+
+  if (lastBusinessNode) {
+    nextEdges.push(createEdge(lastBusinessNode.id, node.id, '进入节点'))
+  } else {
+    nextEdges.push(createEdge('node-start', node.id, '开始执行'))
+  }
+  nextEdges.push(createEdge(node.id, 'node-end', '结束流程'))
+
+  const normalized = ensureSystemNodes(nextNodes, nextEdges)
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
+  syncNodeForm(flowNodes.value.find((item) => item.id === node.id) || null)
   setSelectedNode(node.id)
 }
 
@@ -401,39 +553,22 @@ function addChildNode() {
     },
   })
 
-  const edgeToEnd = flowEdges.value.find(
-    (edge) => edge.source === selectedNode.value.id && edge.target === 'node-end'
-  )
+  const outgoingEdges = flowEdges.value.filter((edge) => edge.source === selectedNode.value.id)
+  const nextEdges = flowEdges.value.filter((edge) => edge.source !== selectedNode.value.id)
+  nextEdges.push(createEdge(selectedNode.value.id, childId, '进入子节点'))
 
-  flowNodes.value = [
-    ...flowNodes.value.filter((node) => node.id !== 'node-end'),
-    childNode,
-    flowNodes.value.find((node) => node.id === 'node-end') || createEndNode(),
-  ]
-
-  const nextEdges = flowEdges.value.filter((edge) => edge.id !== edgeToEnd?.id)
-  nextEdges.push({
-    id: `edge-${selectedNode.value.id}-${childId}`,
-    source: selectedNode.value.id,
-    target: childId,
-    label: '进入子节点',
-    type: 'smoothstep',
-    markerEnd: MarkerType.ArrowClosed,
-  })
-
-  if (edgeToEnd) {
-    nextEdges.push({
-      id: `edge-${childId}-end`,
-      source: childId,
-      target: 'node-end',
-      label: '结束流程',
-      type: 'smoothstep',
-      markerEnd: MarkerType.ArrowClosed,
+  if (outgoingEdges.length) {
+    outgoingEdges.forEach((edge) => {
+      nextEdges.push(createEdge(childId, edge.target, edge.label || 'next'))
     })
+  } else {
+    nextEdges.push(createEdge(childId, 'node-end', '结束流程'))
   }
 
-  flowEdges.value = nextEdges
-  syncNodeForm(childNode)
+  const normalized = ensureSystemNodes([...flowNodes.value, childNode], nextEdges)
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
+  syncNodeForm(flowNodes.value.find((node) => node.id === childId) || null)
   setSelectedNode(childId)
   closeNodeContextMenu()
 }
@@ -452,37 +587,46 @@ function onConnect(connection) {
   }
 
   flowEdges.value = [
-    ...flowEdges.value,
-    {
-      ...connection,
-      id: `edge-${Date.now()}`,
-      label: 'next',
-      type: 'smoothstep',
-      markerEnd: MarkerType.ArrowClosed,
-    },
+    ...flowEdges.value.filter(
+      (edge) => !(edge.source === connection.source && edge.target === connection.target)
+    ),
+    createEdge(connection.source, connection.target),
   ]
 }
 
 function layoutNodesHorizontally() {
-  const sortedNodes = ensureSystemNodes(flowNodes.value, flowEdges.value).nodes
-  flowNodes.value = sortedNodes.map((node, index) => ({
-    ...node,
-    position: {
-      x: 80 + index * 250,
-      y: 220,
-    },
-  }))
+  const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
 }
 
 function onNodeClick(payload) {
   syncNodeForm(payload.node)
   setSelectedNode(payload.node.id)
+  openPropertyPanel()
+  closeNodeContextMenu()
+}
+
+function onEdgeClick(eventOrPayload, edgePayload) {
+  const edge = edgePayload || eventOrPayload?.edge || eventOrPayload
+  const event = edgePayload ? eventOrPayload : eventOrPayload?.event
+  if (!edge?.id) {
+    return
+  }
+
+  event?.stopPropagation?.()
+  syncEdgeForm(edge)
+  setSelectedEdge(edge.id)
+  openPropertyPanel()
   closeNodeContextMenu()
 }
 
 function clearSelectedNode() {
   syncNodeForm(null)
+  syncEdgeForm(null)
   setSelectedNode('')
+  setSelectedEdge('')
+  closePropertyPanel()
   closeNodeContextMenu()
   stopEditingNodeLabel()
 }
@@ -567,9 +711,26 @@ function removeNodeById(nodeId) {
     return message.warning('开始节点和结束节点不允许删除')
   }
 
-  flowNodes.value = flowNodes.value.filter((item) => item.id !== nodeId)
-  flowEdges.value = flowEdges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
-  const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+  const incomingEdges = flowEdges.value.filter((edge) => edge.target === nodeId)
+  const outgoingEdges = flowEdges.value.filter((edge) => edge.source === nodeId)
+  const remainingNodes = flowNodes.value.filter((item) => item.id !== nodeId)
+  const remainingEdges = flowEdges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+
+  if (incomingEdges.length && outgoingEdges.length) {
+    incomingEdges.forEach((incomingEdge) => {
+      outgoingEdges.forEach((outgoingEdge) => {
+        if (incomingEdge.source !== outgoingEdge.target) {
+          remainingEdges.push(createEdge(incomingEdge.source, outgoingEdge.target, outgoingEdge.label || incomingEdge.label || 'next'))
+        }
+      })
+    })
+  } else if (incomingEdges.length && !outgoingEdges.length) {
+    incomingEdges.forEach((incomingEdge) => {
+      remainingEdges.push(createEdge(incomingEdge.source, 'node-end', incomingEdge.label || '结束流程'))
+    })
+  }
+
+  const normalized = ensureSystemNodes(remainingNodes, remainingEdges)
   flowNodes.value = normalized.nodes
   flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value[0] || null)
@@ -619,6 +780,27 @@ function updateSelectedNode() {
       : node
   )
   setSelectedNode(selectedNodeId.value)
+}
+
+function updateSelectedEdge() {
+  if (!selectedEdge.value) {
+    return
+  }
+
+  const nextLabel = edgeForm.label.trim()
+  if (!nextLabel) {
+    return message.warning('连线文案不能为空')
+  }
+
+  flowEdges.value = flowEdges.value.map((edge) =>
+    edge.id === selectedEdgeId.value
+      ? {
+          ...edge,
+          label: nextLabel,
+        }
+      : edge
+  )
+  setSelectedEdge(selectedEdgeId.value)
 }
 
 function removeSelectedNode() {
@@ -751,42 +933,29 @@ onMounted(async () => {
 
 <template>
   <div class="page-stack">
-    <div class="workflow-engine-layout" :class="{ 'workflow-engine-layout-fullscreen': isEditorFullscreen }">
-      <a-card title="节点面板" class="panel-card workflow-panel-card">
-        <div class="workflow-panel-tip">拖拽能力后续可继续补，这一版先保证节点新增、编辑、连线、绑定闭环。</div>
-        <div class="workflow-palette">
-          <button
-            v-for="item in palette"
-            :key="item.kind"
-            class="workflow-palette-item"
-            @click="addNode(item.kind)"
-          >
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.kind }}</span>
-          </button>
-        </div>
-      </a-card>
-
-      <a-card title="流程引擎" :loading="loading" class="panel-card workflow-canvas-card">
+    <div class="workflow-engine-layout workflow-engine-layout-fullscreen">
+      <a-card title="流程引擎" :loading="loading" class="panel-card workflow-canvas-card workflow-stage-card">
         <template #extra>
-          <div class="workflow-topbar">
+          <div class="workflow-stage-header">
             <div class="workflow-topbar-meta">
-              <span>流程选择</span>
-              <span>选择后可直接进入画布编辑</span>
+              <span>画布优先模式</span>
+              <span>节点和属性改成悬浮面板，鼠标移到左右边缘可快速展开。</span>
             </div>
-            <div class="workflow-topbar-actions">
+            <div class="workflow-stage-actions">
               <a-select
                 v-model:value="selectedWorkflowId"
                 class="workflow-select"
                 placeholder="选择流程"
                 :options="workflowOptions"
               />
-              <a-button type="primary" ghost @click="addChildNode">添加子节点</a-button>
-              <a-button @click="layoutNodesHorizontally">横向整理</a-button>
-              <a-button @click="isEditorFullscreen = !isEditorFullscreen">
-                {{ isEditorFullscreen ? '退出全屏' : '全屏编辑' }}
+              <a-button :loading="bindingSaving" @click="saveBinding">
+                {{ currentBinding ? '更新绑定' : '绑定流程' }}
               </a-button>
-              <a-button danger @click="removeSelectedNode">删除节点</a-button>
+              <a-button type="primary" :loading="saving" @click="createNewWorkflow">新建流程</a-button>
+              <a-button :loading="saving" @click="saveWorkflow()">保存流程</a-button>
+              <a-button type="primary" ghost :loading="saving" @click="saveWorkflow({ publish: true })">
+                发布流程
+              </a-button>
             </div>
           </div>
         </template>
@@ -795,6 +964,97 @@ onMounted(async () => {
           <div class="workflow-canvas-toolbar">
             <span>{{ currentWorkflow?.name || '未选择流程' }}</span>
             <span>{{ currentWorkflow?.status || 'draft' }}</span>
+          </div>
+          <div class="workflow-floating-actions">
+            <button type="button" class="workflow-floating-button primary" @click="addChildNode">添加子节点</button>
+            <button type="button" class="workflow-floating-button" @click="layoutNodesHorizontally">横向整理</button>
+          </div>
+          <button
+            type="button"
+            class="workflow-side-trigger workflow-side-trigger-left"
+            @mouseenter="openPalettePanel()"
+            @click="togglePalettePanel"
+          >
+            节点
+          </button>
+          <div
+            class="workflow-hover-panel workflow-hover-panel-left"
+            :class="{ 'is-visible': isPaletteVisible }"
+            @mouseenter="openPalettePanel()"
+            @mouseleave="closePalettePanel"
+          >
+            <div class="workflow-hover-panel-header">
+              <strong>节点面板</strong>
+              <a-space size="small">
+                <a-button size="small" @click="togglePalettePanel">
+                  {{ isPalettePinned ? '取消固定' : '固定面板' }}
+                </a-button>
+                <a-button size="small" @click="isPaletteVisible = false; isPalettePinned = false">关闭</a-button>
+              </a-space>
+            </div>
+            <div class="workflow-panel-tip">常用节点放在左侧悬浮面板里，需要时展开，不再长期挤占画布。</div>
+            <div class="workflow-palette">
+              <button
+                v-for="item in palette"
+                :key="item.kind"
+                class="workflow-palette-item"
+                @click="addNode(item.kind)"
+              >
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.kind }}</span>
+              </button>
+            </div>
+          </div>
+          <div
+            v-if="(selectedNode || selectedEdge) && isPropertyPanelVisible"
+            class="workflow-hover-panel workflow-hover-panel-right"
+            :class="{ 'is-visible': isPropertyPanelVisible }"
+          >
+            <div class="workflow-hover-panel-header">
+              <strong>{{ selectedNode ? selectedNode?.data?.label : selectedEdge?.label || '连线属性' }}</strong>
+              <a-space size="small">
+                <a-button size="small" @click="closePropertyPanel">关闭</a-button>
+              </a-space>
+            </div>
+            <a-form layout="vertical">
+              <template v-if="selectedNode">
+                <div class="workflow-panel-tip">点击节点后显示当前节点属性，只保留和当前节点配置直接相关的内容。</div>
+                <div class="workflow-node-actions">
+                  <a-button block @click="updateSelectedNode">保存当前节点配置</a-button>
+                </div>
+                <a-form-item label="节点标题">
+                  <a-input
+                    v-model:value="nodeForm.label"
+                    :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
+                  />
+                </a-form-item>
+                <a-form-item label="节点类型">
+                  <a-select
+                    v-model:value="nodeForm.kind"
+                    :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
+                    :options="[
+                      { value: 'trigger', label: 'trigger' },
+                      { value: 'ai', label: 'ai' },
+                      { value: 'router', label: 'router' },
+                      { value: 'tool', label: 'tool' },
+                      { value: 'output', label: 'output' },
+                    ]"
+                  />
+                </a-form-item>
+                <a-form-item label="节点逻辑">
+                  <a-textarea v-model:value="nodeForm.prompt" :rows="4" :disabled="!selectedNode" />
+                </a-form-item>
+              </template>
+              <template v-else-if="selectedEdge">
+                <div class="workflow-panel-tip">点击连线后可修改这条连线上的文案。</div>
+                <div class="workflow-node-actions">
+                  <a-button block @click="updateSelectedEdge">保存当前连线文案</a-button>
+                </div>
+                <a-form-item label="连线文案">
+                  <a-input v-model:value="edgeForm.label" :disabled="!selectedEdge" placeholder="请输入连线标签" />
+                </a-form-item>
+              </template>
+            </a-form>
           </div>
           <VueFlow
             v-model:nodes="flowNodes"
@@ -807,6 +1067,7 @@ onMounted(async () => {
             :connection-line-type="ConnectionLineType.SmoothStep"
             @connect="onConnect"
             @node-click="onNodeClick"
+            @edge-click="onEdgeClick"
             @pane-click="clearSelectedNode"
           >
             <template #node-default="{ id, data, selected }">
@@ -846,88 +1107,6 @@ onMounted(async () => {
             <button type="button" class="danger" @click="removeNodeById(nodeContextMenu.nodeId)">删除节点</button>
           </div>
         </div>
-      </a-card>
-
-      <a-card title="属性面板" class="panel-card workflow-panel-card">
-        <a-form layout="vertical">
-          <div class="workflow-panel-tip">先选 Agent，再保存流程，最后绑定到当前 Agent。</div>
-          <a-form-item label="当前 Agent">
-            <a-select
-              v-model:value="selectedAgentId"
-              placeholder="选择要编排的 Agent"
-              :options="agentOptions"
-            />
-          </a-form-item>
-          <div class="workflow-binding-state">
-            <strong>{{ currentBinding ? '当前 Agent 已绑定该流程' : '当前 Agent 尚未绑定该流程' }}</strong>
-            <span>
-              {{ currentBinding ? `${currentBinding.mode} / ${currentBinding.triggerType}` : '保存后可直接建立绑定关系' }}
-            </span>
-          </div>
-          <div class="workflow-node-actions">
-            <a-button type="primary" block @click="addChildNode">添加子节点</a-button>
-            <a-button block @click="layoutNodesHorizontally">横向整理节点</a-button>
-            <a-button block @click="updateSelectedNode">保存当前节点配置</a-button>
-            <a-button danger block @click="removeSelectedNode">删除当前节点</a-button>
-          </div>
-          <a-form-item label="流程名称">
-            <a-input v-model:value="workflowForm.name" />
-          </a-form-item>
-          <a-form-item label="流程编码">
-            <a-input v-model:value="workflowForm.code" />
-          </a-form-item>
-          <a-form-item label="状态">
-            <a-select
-              v-model:value="workflowForm.status"
-              :options="[
-                { value: 'draft', label: 'draft' },
-                { value: 'published', label: 'published' },
-              ]"
-            />
-          </a-form-item>
-          <a-form-item label="流程描述">
-            <a-textarea v-model:value="workflowForm.description" :rows="3" />
-          </a-form-item>
-
-          <div class="workflow-panel-title">节点属性</div>
-          <div class="workflow-panel-tip">
-            {{ selectedNode ? `当前节点：${selectedNode.data?.label || selectedNode.id}` : '请先在画布中选中一个节点后再配置。' }}
-          </div>
-
-          <a-form-item label="节点标题">
-            <a-input
-              v-model:value="nodeForm.label"
-              :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
-            />
-          </a-form-item>
-          <a-form-item label="节点类型">
-            <a-select
-              v-model:value="nodeForm.kind"
-              :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
-              :options="[
-                { value: 'trigger', label: 'trigger' },
-                { value: 'ai', label: 'ai' },
-                { value: 'router', label: 'router' },
-                { value: 'tool', label: 'tool' },
-                { value: 'output', label: 'output' },
-              ]"
-            />
-          </a-form-item>
-          <a-form-item label="节点逻辑">
-            <a-textarea v-model:value="nodeForm.prompt" :rows="4" :disabled="!selectedNode" />
-          </a-form-item>
-
-          <a-space direction="vertical" class="full-width">
-            <a-button block :loading="bindingSaving" @click="saveBinding">
-              {{ currentBinding ? '更新 Agent 绑定' : '绑定到当前 Agent' }}
-            </a-button>
-            <a-button type="primary" block :loading="saving" @click="createNewWorkflow">新建流程</a-button>
-            <a-button block :loading="saving" @click="saveWorkflow()">保存流程</a-button>
-            <a-button type="primary" ghost block :loading="saving" @click="saveWorkflow({ publish: true })">
-              发布流程
-            </a-button>
-          </a-space>
-        </a-form>
       </a-card>
     </div>
   </div>

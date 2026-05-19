@@ -340,7 +340,7 @@ select {
 }
 
 .workflow-engine-canvas .vue-flow__node-default {
-  padding: 12px 14px;
+  padding: 0;
   border-radius: 12px;
   background: #fff;
 }
@@ -363,8 +363,11 @@ select {
 .workflow-node-card {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
-  min-width: 150px;
+  min-width: 160px;
+  padding: 12px 16px;
+  text-align: center;
 }
 
 .workflow-node-card.is-selected {
@@ -372,6 +375,7 @@ select {
 }
 
 .workflow-node-card-kind {
+  width: 100%;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -379,16 +383,11 @@ select {
 }
 
 .workflow-node-card-title {
+  width: 100%;
   font-size: 14px;
   font-weight: 700;
   color: #111827;
   cursor: text;
-}
-
-.workflow-node-card-desc {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #6b7280;
 }
 
 .workflow-node-inline-input {

@@ -29,8 +29,7 @@ const selectedEdgeId = ref('')
 const flowNodes = ref([])
 const flowEdges = ref([])
 const bindingSaving = ref(false)
-const isPaletteVisible = ref(false)
-const isPalettePinned = ref(false)
+const isCreateNodeMenuVisible = ref(false)
 const isPropertyPanelVisible = ref(false)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
@@ -247,28 +246,12 @@ function applyHorizontalPositions(nodes = []) {
   }))
 }
 
-function openPalettePanel({ pinned = false } = {}) {
-  isPaletteVisible.value = true
-  if (pinned) {
-    isPalettePinned.value = true
-  }
+function toggleCreateNodeMenu() {
+  isCreateNodeMenuVisible.value = !isCreateNodeMenuVisible.value
 }
 
-function closePalettePanel() {
-  if (!isPalettePinned.value) {
-    isPaletteVisible.value = false
-  }
-}
-
-function togglePalettePanel() {
-  if (isPaletteVisible.value && isPalettePinned.value) {
-    isPalettePinned.value = false
-    isPaletteVisible.value = false
-    return
-  }
-
-  isPaletteVisible.value = true
-  isPalettePinned.value = true
+function closeCreateNodeMenu() {
+  isCreateNodeMenuVisible.value = false
 }
 
 function openPropertyPanel({ pinned = false } = {}) {
@@ -527,6 +510,7 @@ function addNode(kind) {
   flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value.find((item) => item.id === node.id) || null)
   setSelectedNode(node.id)
+  closeCreateNodeMenu()
 }
 
 function addChildNode() {
@@ -626,6 +610,7 @@ function clearSelectedNode() {
   syncEdgeForm(null)
   setSelectedNode('')
   setSelectedEdge('')
+  closeCreateNodeMenu()
   closePropertyPanel()
   closeNodeContextMenu()
   stopEditingNodeLabel()
@@ -951,6 +936,7 @@ onMounted(async () => {
               <a-button :loading="bindingSaving" @click="saveBinding">
                 {{ currentBinding ? '更新绑定' : '绑定流程' }}
               </a-button>
+              <a-button @click="layoutNodesHorizontally">流程整理</a-button>
               <a-button type="primary" :loading="saving" @click="createNewWorkflow">新建流程</a-button>
               <a-button :loading="saving" @click="saveWorkflow()">保存流程</a-button>
               <a-button type="primary" ghost :loading="saving" @click="saveWorkflow({ publish: true })">
@@ -966,33 +952,17 @@ onMounted(async () => {
             <span>{{ currentWorkflow?.status || 'draft' }}</span>
           </div>
           <div class="workflow-floating-actions">
-            <button type="button" class="workflow-floating-button primary" @click="addChildNode">添加子节点</button>
-            <button type="button" class="workflow-floating-button" @click="layoutNodesHorizontally">横向整理</button>
+            <button type="button" class="workflow-floating-button primary" @click="toggleCreateNodeMenu">
+              新建节点
+            </button>
           </div>
-          <button
-            type="button"
-            class="workflow-side-trigger workflow-side-trigger-left"
-            @mouseenter="openPalettePanel()"
-            @click="togglePalettePanel"
-          >
-            节点
-          </button>
-          <div
-            class="workflow-hover-panel workflow-hover-panel-left"
-            :class="{ 'is-visible': isPaletteVisible }"
-            @mouseenter="openPalettePanel()"
-            @mouseleave="closePalettePanel"
-          >
+          <div v-if="isCreateNodeMenuVisible" class="workflow-create-node-menu">
             <div class="workflow-hover-panel-header">
-              <strong>节点面板</strong>
+              <strong>选择节点类型</strong>
               <a-space size="small">
-                <a-button size="small" @click="togglePalettePanel">
-                  {{ isPalettePinned ? '取消固定' : '固定面板' }}
-                </a-button>
-                <a-button size="small" @click="isPaletteVisible = false; isPalettePinned = false">关闭</a-button>
+                <a-button size="small" @click="closeCreateNodeMenu">关闭</a-button>
               </a-space>
             </div>
-            <div class="workflow-panel-tip">常用节点放在左侧悬浮面板里，需要时展开，不再长期挤占画布。</div>
             <div class="workflow-palette">
               <button
                 v-for="item in palette"
@@ -1090,7 +1060,6 @@ onMounted(async () => {
                   />
                   <span v-else>{{ data.label }}</span>
                 </div>
-                <div class="workflow-node-card-desc">{{ data.prompt }}</div>
               </div>
             </template>
             <Background />

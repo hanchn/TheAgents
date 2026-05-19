@@ -398,6 +398,30 @@ select {
   outline: none;
 }
 
+.workflow-node-handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #1677ff;
+  background: #fff;
+  opacity: 0;
+  box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.workflow-engine-canvas .vue-flow__node:hover .workflow-node-handle,
+.workflow-engine-canvas .vue-flow__node.selected .workflow-node-handle {
+  opacity: 1;
+}
+
+.workflow-engine-canvas .vue-flow__node:hover .workflow-node-handle:hover,
+.workflow-engine-canvas .vue-flow__node.selected .workflow-node-handle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 6px rgba(22, 119, 255, 0.18);
+}
+
 .workflow-engine-canvas .workflow-node-start.selected {
   border-color: #52c41a;
   box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.16);

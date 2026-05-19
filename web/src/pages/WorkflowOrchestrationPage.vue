@@ -4,7 +4,7 @@ import { message } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { ConnectionLineType, MarkerType, Position, VueFlow } from '@vue-flow/core'
+import { ConnectionLineType, Handle, MarkerType, Position, VueFlow } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
 import {
   createBinding,
@@ -29,10 +29,14 @@ const selectedEdgeId = ref('')
 const flowNodes = ref([])
 const flowEdges = ref([])
 const bindingSaving = ref(false)
-const isCreateNodeMenuVisible = ref(false)
 const isPropertyPanelVisible = ref(false)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
+const createNodeContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+})
 const nodeContextMenu = reactive({
   visible: false,
   x: 0,
@@ -246,12 +250,28 @@ function applyHorizontalPositions(nodes = []) {
   }))
 }
 
-function toggleCreateNodeMenu() {
-  isCreateNodeMenuVisible.value = !isCreateNodeMenuVisible.value
+function openCreateNodeContextMenu(event) {
+  if (
+    event.target?.closest('.vue-flow__node') ||
+    event.target?.closest('.vue-flow__edge') ||
+    event.target?.closest('.workflow-context-menu') ||
+    event.target?.closest('.workflow-hover-panel')
+  ) {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  createNodeContextMenu.visible = true
+  createNodeContextMenu.x = event.clientX
+  createNodeContextMenu.y = event.clientY
+  closeNodeContextMenu()
 }
 
-function closeCreateNodeMenu() {
-  isCreateNodeMenuVisible.value = false
+function closeCreateNodeContextMenu() {
+  createNodeContextMenu.visible = false
+  createNodeContextMenu.x = 0
+  createNodeContextMenu.y = 0
 }
 
 function openPropertyPanel({ pinned = false } = {}) {
@@ -510,7 +530,7 @@ function addNode(kind) {
   flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value.find((item) => item.id === node.id) || null)
   setSelectedNode(node.id)
-  closeCreateNodeMenu()
+  closeCreateNodeContextMenu()
 }
 
 function addChildNode() {
@@ -587,6 +607,7 @@ function layoutNodesHorizontally() {
 function onNodeClick(payload) {
   syncNodeForm(payload.node)
   setSelectedNode(payload.node.id)
+  closeCreateNodeContextMenu()
   openPropertyPanel()
   closeNodeContextMenu()
 }
@@ -601,6 +622,7 @@ function onEdgeClick(eventOrPayload, edgePayload) {
   event?.stopPropagation?.()
   syncEdgeForm(edge)
   setSelectedEdge(edge.id)
+  closeCreateNodeContextMenu()
   openPropertyPanel()
   closeNodeContextMenu()
 }
@@ -610,7 +632,7 @@ function clearSelectedNode() {
   syncEdgeForm(null)
   setSelectedNode('')
   setSelectedEdge('')
-  closeCreateNodeMenu()
+  closeCreateNodeContextMenu()
   closePropertyPanel()
   closeNodeContextMenu()
   stopEditingNodeLabel()
@@ -621,6 +643,7 @@ function openNodeContextMenu(event, nodeId) {
   event.stopPropagation()
   setSelectedNode(nodeId)
   syncNodeForm(flowNodes.value.find((node) => node.id === nodeId) || null)
+  closeCreateNodeContextMenu()
   nodeContextMenu.visible = true
   nodeContextMenu.x = event.clientX
   nodeContextMenu.y = event.clientY
@@ -924,7 +947,7 @@ onMounted(async () => {
           <div class="workflow-stage-header">
             <div class="workflow-topbar-meta">
               <span>画布优先模式</span>
-              <span>节点和属性改成悬浮面板，鼠标移到左右边缘可快速展开。</span>
+              <span>创建节点时直接选择类型，点击节点或连线后在右侧编辑当前属性。</span>
             </div>
             <div class="workflow-stage-actions">
               <a-select
@@ -946,34 +969,24 @@ onMounted(async () => {
           </div>
         </template>
 
-        <div class="workflow-canvas-shell">
+        <div class="workflow-canvas-shell" @contextmenu="openCreateNodeContextMenu">
           <div class="workflow-canvas-toolbar">
             <span>{{ currentWorkflow?.name || '未选择流程' }}</span>
             <span>{{ currentWorkflow?.status || 'draft' }}</span>
           </div>
-          <div class="workflow-floating-actions">
-            <button type="button" class="workflow-floating-button primary" @click="toggleCreateNodeMenu">
-              新建节点
+          <div
+            v-if="createNodeContextMenu.visible"
+            class="workflow-context-menu workflow-context-menu-create"
+            :style="{ left: `${createNodeContextMenu.x}px`, top: `${createNodeContextMenu.y}px` }"
+          >
+            <button
+              v-for="item in palette"
+              :key="item.kind"
+              type="button"
+              @click="addNode(item.kind)"
+            >
+              {{ item.label }}
             </button>
-          </div>
-          <div v-if="isCreateNodeMenuVisible" class="workflow-create-node-menu">
-            <div class="workflow-hover-panel-header">
-              <strong>选择节点类型</strong>
-              <a-space size="small">
-                <a-button size="small" @click="closeCreateNodeMenu">关闭</a-button>
-              </a-space>
-            </div>
-            <div class="workflow-palette">
-              <button
-                v-for="item in palette"
-                :key="item.kind"
-                class="workflow-palette-item"
-                @click="addNode(item.kind)"
-              >
-                <strong>{{ item.label }}</strong>
-                <span>{{ item.kind }}</span>
-              </button>
-            </div>
           </div>
           <div
             v-if="(selectedNode || selectedEdge) && isPropertyPanelVisible"
@@ -1046,6 +1059,62 @@ onMounted(async () => {
                 :class="{ 'is-selected': selected }"
                 @contextmenu="openNodeContextMenu($event, id)"
               >
+                <Handle
+                  v-if="data.kind !== 'start'"
+                  id="target-top"
+                  type="target"
+                  :position="Position.Top"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'end'"
+                  id="source-top"
+                  type="source"
+                  :position="Position.Top"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'start'"
+                  id="target-right"
+                  type="target"
+                  :position="Position.Right"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'end'"
+                  id="source-right"
+                  type="source"
+                  :position="Position.Right"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'start'"
+                  id="target-bottom"
+                  type="target"
+                  :position="Position.Bottom"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'end'"
+                  id="source-bottom"
+                  type="source"
+                  :position="Position.Bottom"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'start'"
+                  id="target-left"
+                  type="target"
+                  :position="Position.Left"
+                  class="workflow-node-handle"
+                />
+                <Handle
+                  v-if="data.kind !== 'end'"
+                  id="source-left"
+                  type="source"
+                  :position="Position.Left"
+                  class="workflow-node-handle"
+                />
                 <div class="workflow-node-card-kind">{{ data.kind }}</div>
                 <div class="workflow-node-card-title" @dblclick.stop="startEditingNodeLabel(id)">
                   <input

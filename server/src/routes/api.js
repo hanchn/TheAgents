@@ -45,6 +45,7 @@ function normalizeAgent(agent, bindings = []) {
     publishStatus: agent.publishStatus,
     version: agent.version,
     owner: agent.owner,
+    category: agent.category,
     endpoint: agent.endpoint,
     description: agent.description,
     capabilities: agent.capabilities || [],
@@ -155,6 +156,7 @@ router.get('/agents', async (req, res) => {
   const keyword = (req.query.keyword || '').trim();
   const publishStatus = (req.query.publishStatus || '').trim();
   const status = (req.query.status || '').trim();
+  const category = (req.query.category || '').trim();
 
   const where = {};
 
@@ -172,6 +174,10 @@ router.get('/agents', async (req, res) => {
 
   if (status) {
     where.status = status;
+  }
+
+  if (category) {
+    where.category = category;
   }
 
   const result = await Agent.findAndCountAll({
@@ -228,6 +234,7 @@ router.post('/agents', async (req, res) => {
     publishStatus: req.body.publishStatus || 'draft',
     version: req.body.version || 1,
     owner: req.body.owner || '',
+    category: req.body.category || 'general',
     endpoint: req.body.endpoint || '',
     description: req.body.description || '',
     capabilities: parseJsonInput(req.body.capabilities, []),
@@ -251,6 +258,7 @@ router.put('/agents/:id', async (req, res) => {
     publishStatus: req.body.publishStatus ?? agent.publishStatus,
     version: req.body.version ?? agent.version,
     owner: req.body.owner ?? agent.owner,
+    category: req.body.category ?? agent.category,
     endpoint: req.body.endpoint ?? agent.endpoint,
     description: req.body.description ?? agent.description,
     capabilities: parseJsonInput(req.body.capabilities, agent.capabilities),

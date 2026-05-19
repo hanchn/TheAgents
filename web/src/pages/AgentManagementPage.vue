@@ -1,21 +1,58 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { getAgentDetail, getAgentPage } from '../lib/api'
+import { useRouter } from 'vue-router'
+import {
+  createAgent,
+  getAgentDetail,
+  getAgentPage,
+  updateAgent,
+} from '../lib/api'
 
+const categoryOptions = [
+  { value: 'cross_border', label: '国外（跨境）' },
+  { value: 'medical_promotion', label: '医疗宣传' },
+  { value: 'domestic_marketing', label: '国内营销' },
+  { value: 'general', label: '未分类' },
+]
+
+function getCategoryLabel(value) {
+  return categoryOptions.find((item) => item.value === value)?.label || '未分类'
+}
+
+const router = useRouter()
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
+const formVisible = ref(false)
+const saving = ref(false)
 const agents = ref([])
 const total = ref(0)
 const detail = ref(null)
+const editingId = ref('')
 
 const filters = reactive({
   keyword: '',
+  category: '',
   publishStatus: '',
   status: '',
   page: 1,
   pageSize: 8,
+})
+
+const agentForm = reactive({
+  name: '',
+  code: '',
+  type: 'assistant',
+  status: 'active',
+  publishStatus: 'draft',
+  version: 1,
+  owner: '',
+  category: 'general',
+  endpoint: '',
+  description: '',
+  capabilitiesText: '',
+  configText: '{\n  "model": "gpt-4.1",\n  "timeoutMs": 12000\n}',
 })
 
 const columns = [
@@ -23,40 +60,55 @@ const columns = [
     title: 'Agent',
     dataIndex: 'name',
     key: 'name',
+    width: 280,
   },
   {
     title: '编码',
     dataIndex: 'code',
     key: 'code',
+    width: 180,
   },
   {
     title: '类型',
     dataIndex: 'type',
     key: 'type',
+    width: 120,
+  },
+  {
+    title: '分类',
+    dataIndex: 'category',
+    key: 'category',
+    width: 140,
   },
   {
     title: '发布状态',
     dataIndex: 'publishStatus',
     key: 'publishStatus',
+    width: 120,
   },
   {
     title: '运行状态',
     dataIndex: 'status',
     key: 'status',
+    width: 120,
   },
   {
     title: '负责人',
     dataIndex: 'owner',
     key: 'owner',
+    width: 140,
   },
   {
     title: '已发布流程数',
     dataIndex: 'publishedWorkflowCount',
     key: 'publishedWorkflowCount',
+    width: 140,
   },
   {
     title: '操作',
     key: 'action',
+    width: 220,
+    fixed: 'right',
   },
 ]
 
@@ -76,6 +128,7 @@ async function loadList() {
       page: filters.page,
       pageSize: filters.pageSize,
       keyword: filters.keyword,
+      category: filters.category,
       publishStatus: filters.publishStatus,
       status: filters.status,
     })
@@ -104,6 +157,95 @@ async function showDetail(record) {
   }
 }
 
+function normalizeCode(text) {
+  return (text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+}
+
+function resetForm() {
+  editingId.value = ''
+  agentForm.name = ''
+  agentForm.code = ''
+  agentForm.type = 'assistant'
+  agentForm.status = 'active'
+  agentForm.publishStatus = 'draft'
+  agentForm.version = 1
+  agentForm.owner = ''
+  agentForm.category = 'general'
+  agentForm.endpoint = ''
+  agentForm.description = ''
+  agentForm.capabilitiesText = ''
+  agentForm.configText = '{\n  "model": "gpt-4.1",\n  "timeoutMs": 12000\n}'
+}
+
+function openCreate() {
+  resetForm()
+  formVisible.value = true
+}
+
+function openEdit(record) {
+  editingId.value = record.id
+  agentForm.name = record.name || ''
+  agentForm.code = record.code || ''
+  agentForm.type = record.type || 'assistant'
+  agentForm.status = record.status || 'active'
+  agentForm.publishStatus = record.publishStatus || 'draft'
+  agentForm.version = record.version || 1
+  agentForm.owner = record.owner || ''
+  agentForm.category = record.category || 'general'
+  agentForm.endpoint = record.endpoint || ''
+  agentForm.description = record.description || ''
+  agentForm.capabilitiesText = Array.isArray(record.capabilities) ? record.capabilities.join(',') : ''
+  agentForm.configText = JSON.stringify(record.config || {}, null, 2)
+  formVisible.value = true
+}
+
+async function submitForm() {
+  if (!agentForm.name.trim()) {
+    return message.warning('请输入 Agent 名称')
+  }
+
+  saving.value = true
+
+  try {
+    const payload = {
+      name: agentForm.name.trim(),
+      code: normalizeCode(agentForm.code || agentForm.name),
+      type: agentForm.type,
+      status: agentForm.status,
+      publishStatus: agentForm.publishStatus,
+      version: Number(agentForm.version || 1),
+      owner: agentForm.owner.trim(),
+      category: agentForm.category,
+      endpoint: agentForm.endpoint.trim(),
+      description: agentForm.description.trim(),
+      capabilities: agentForm.capabilitiesText
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+      config: agentForm.configText ? JSON.parse(agentForm.configText) : {},
+    }
+
+    if (editingId.value) {
+      await updateAgent(editingId.value, payload)
+      message.success('Agent 已更新')
+    } else {
+      await createAgent(payload)
+      message.success('Agent 已创建')
+    }
+
+    formVisible.value = false
+    resetForm()
+    loadList()
+  } catch (error) {
+    message.error(error.response?.data?.message || error.message || '保存 Agent 失败')
+  } finally {
+    saving.value = false
+  }
+}
+
 function handleTableChange(pageConfig) {
   filters.page = pageConfig.current
   filters.pageSize = pageConfig.pageSize
@@ -117,6 +259,7 @@ function search() {
 
 function reset() {
   filters.keyword = ''
+  filters.category = ''
   filters.publishStatus = ''
   filters.status = ''
   filters.page = 1
@@ -124,25 +267,32 @@ function reset() {
   loadList()
 }
 
+function goOrchestrate(record) {
+  router.push({
+    path: '/workflow-orchestration',
+    query: {
+      agentId: record.id,
+    },
+  })
+}
+
 onMounted(loadList)
 </script>
 
 <template>
   <div class="page-stack">
-    <section class="hero-card">
-      <div>
-        <p class="brand-kicker">Agent Management</p>
-        <h3>Agent 管理列表</h3>
-        <p>支持分页、筛选和详情查看，方便你管理已经接入的平台 Agent。</p>
-      </div>
-    </section>
-
-    <a-card title="筛选条件" class="panel-card">
+    <a-card title="Agent 搜索表单" class="panel-card">
       <div class="filter-grid">
         <a-input
           v-model:value="filters.keyword"
           placeholder="搜索名称 / 编码 / 负责人"
           @pressEnter="search"
+        />
+        <a-select
+          v-model:value="filters.category"
+          allow-clear
+          placeholder="分类"
+          :options="categoryOptions"
         />
         <a-select
           v-model:value="filters.publishStatus"
@@ -170,12 +320,16 @@ onMounted(loadList)
     </a-card>
 
     <a-card title="Agent 列表" class="panel-card">
+      <template #extra>
+        <a-button type="primary" @click="openCreate">创建 Agent</a-button>
+      </template>
       <a-table
         row-key="id"
         :columns="columns"
         :data-source="agents"
         :loading="loading"
         :pagination="pagination"
+        :scroll="{ x: 1220 }"
         @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
@@ -192,6 +346,10 @@ onMounted(loadList)
             </a-tag>
           </template>
 
+          <template v-if="column.key === 'category'">
+            <a-tag color="purple">{{ getCategoryLabel(record.category) }}</a-tag>
+          </template>
+
           <template v-if="column.key === 'status'">
             <a-tag :color="record.status === 'active' ? 'blue' : 'orange'">
               {{ record.status }}
@@ -199,11 +357,82 @@ onMounted(loadList)
           </template>
 
           <template v-if="column.key === 'action'">
+            <a-button type="link" @click="openEdit(record)">编辑</a-button>
+            <a-button type="link" @click="goOrchestrate(record)">去编排</a-button>
             <a-button type="link" @click="showDetail(record)">查看详情</a-button>
           </template>
         </template>
       </a-table>
     </a-card>
+
+    <a-modal
+      v-model:open="formVisible"
+      :title="editingId ? '编辑 Agent' : '创建 Agent'"
+      :confirm-loading="saving"
+      width="760px"
+      @ok="submitForm"
+      @cancel="resetForm"
+    >
+      <a-form layout="vertical">
+        <div class="agent-form-grid">
+          <a-form-item label="名称">
+            <a-input v-model:value="agentForm.name" />
+          </a-form-item>
+          <a-form-item label="编码">
+            <a-input v-model:value="agentForm.code" />
+          </a-form-item>
+          <a-form-item label="类型">
+            <a-select
+              v-model:value="agentForm.type"
+              :options="[
+                { value: 'assistant', label: 'assistant' },
+                { value: 'router', label: 'router' },
+                { value: 'planner', label: 'planner' },
+              ]"
+            />
+          </a-form-item>
+          <a-form-item label="负责人">
+            <a-input v-model:value="agentForm.owner" />
+          </a-form-item>
+          <a-form-item label="分类">
+            <a-select v-model:value="agentForm.category" :options="categoryOptions" />
+          </a-form-item>
+          <a-form-item label="运行状态">
+            <a-select
+              v-model:value="agentForm.status"
+              :options="[
+                { value: 'active', label: 'active' },
+                { value: 'paused', label: 'paused' },
+              ]"
+            />
+          </a-form-item>
+          <a-form-item label="发布状态">
+            <a-select
+              v-model:value="agentForm.publishStatus"
+              :options="[
+                { value: 'draft', label: 'draft' },
+                { value: 'published', label: 'published' },
+              ]"
+            />
+          </a-form-item>
+          <a-form-item label="版本">
+            <a-input-number v-model:value="agentForm.version" class="full-width" :min="1" />
+          </a-form-item>
+          <a-form-item label="Endpoint">
+            <a-input v-model:value="agentForm.endpoint" />
+          </a-form-item>
+        </div>
+        <a-form-item label="能力标签">
+          <a-input v-model:value="agentForm.capabilitiesText" placeholder="faq,workflow-binding" />
+        </a-form-item>
+        <a-form-item label="描述">
+          <a-textarea v-model:value="agentForm.description" :rows="3" />
+        </a-form-item>
+        <a-form-item label="运行配置 JSON">
+          <a-textarea v-model:value="agentForm.configText" :rows="8" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
     <a-drawer
       v-model:open="detailVisible"
@@ -225,9 +454,14 @@ onMounted(loadList)
               <span class="detail-desc">版本 v{{ detail.version }}</span>
             </div>
             <div class="detail-card">
+              <span class="detail-label">分类</span>
+              <strong class="detail-value detail-value-small">{{ getCategoryLabel(detail.category) }}</strong>
+              <span class="detail-desc">{{ detail.endpoint }}</span>
+            </div>
+            <div class="detail-card">
               <span class="detail-label">发布与运行</span>
               <strong class="detail-value">{{ detail.publishStatus }} / {{ detail.status }}</strong>
-              <span class="detail-desc">{{ detail.endpoint }}</span>
+              <span class="detail-desc">版本 v{{ detail.version }}</span>
             </div>
           </div>
 

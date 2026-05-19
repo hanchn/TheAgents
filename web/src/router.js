@@ -1,17 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AgentConsolePage from './pages/AgentConsolePage.vue'
 import AgentManagementPage from './pages/AgentManagementPage.vue'
+import WorkflowOrchestrationPage from './pages/WorkflowOrchestrationPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/',
-      redirect: '/agent-console',
+      redirect: '/workflow-orchestration',
     },
     {
-      path: '/agent-console',
-      name: 'agent-console',
+      path: '/workflow-orchestration',
+      name: 'workflow-orchestration',
+      component: WorkflowOrchestrationPage,
+    },
+    {
+      path: '/agent-chat',
+      name: 'agent-chat',
       component: AgentConsolePage,
     },
     {

@@ -61,6 +61,36 @@ async function ensureAgentSchema() {
       "ALTER TABLE agents ADD COLUMN owner VARCHAR(255) NOT NULL DEFAULT ''"
     );
   }
+
+  if (!columnNames.has('category')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN category VARCHAR(255) NOT NULL DEFAULT 'general'"
+    );
+  }
+
+  if (!columnNames.has('market')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN market VARCHAR(255) NOT NULL DEFAULT 'general'"
+    );
+  }
+
+  if (!columnNames.has('platform')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN platform VARCHAR(255) NOT NULL DEFAULT 'generic'"
+    );
+  }
+
+  if (!columnNames.has('scenario')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN scenario VARCHAR(255) NOT NULL DEFAULT ''"
+    );
+  }
+
+  if (!columnNames.has('templateCode')) {
+    await sequelize.query(
+      "ALTER TABLE agents ADD COLUMN templateCode VARCHAR(255) NOT NULL DEFAULT ''"
+    );
+  }
 }
 
 async function bootstrap() {

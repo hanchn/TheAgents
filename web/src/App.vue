@@ -5,55 +5,58 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 const route = useRoute()
 
 const menus = [
-  {
-    key: '/agent-console',
-    title: '已发布 Agent 控制台',
-    description: '切换已发布 Agent，并查看当前详情与流程对话调试。',
-  },
-  {
-    key: '/agents',
-    title: 'Agent 管理列表',
-    description: '支持分页、筛选和详情查看。',
-  },
+  { key: '/workflow-orchestration', title: '流程编排' },
+  { key: '/agent-chat', title: 'Agent 对话' },
+  { key: '/agents', title: 'Agent 列表' },
 ]
 
 const currentTitle = computed(
   () => menus.find((item) => item.key === route.path)?.title || 'Agent 平台'
 )
+
 </script>
 
 <template>
-  <div class="shell">
-    <aside class="side-nav">
-      <div class="brand-block">
-        <p class="brand-kicker">Agent Platform</p>
-        <h1>Agent 接入工作台</h1>
-        <p>拆成独立页面，聚焦已发布 Agent 切换和管理列表。</p>
+  <div class="admin-layout">
+    <aside class="admin-sider">
+      <div class="admin-logo">
+        <div class="admin-logo-mark">A</div>
+        <div>
+          <strong>Agent Admin</strong>
+          <span>接入与发布后台</span>
+        </div>
       </div>
 
-      <nav class="menu-list">
-        <RouterLink
-          v-for="item in menus"
-          :key="item.key"
-          :to="item.key"
-          class="menu-item"
-          :class="{ active: route.path === item.key }"
-        >
-          <strong>{{ item.title }}</strong>
-          <span>{{ item.description }}</span>
-        </RouterLink>
-      </nav>
+      <div class="admin-menu-group">
+        <div class="admin-menu-title">工作台</div>
+        <nav class="admin-menu">
+          <RouterLink
+            v-for="item in menus"
+            :key="item.key"
+            :to="item.key"
+            class="admin-menu-item"
+            :class="{ active: route.path === item.key }"
+          >
+            <strong>{{ item.title }}</strong>
+          </RouterLink>
+        </nav>
+      </div>
     </aside>
 
-    <main class="page-main">
-      <header class="page-header">
+    <div class="admin-main">
+      <header class="admin-header">
         <div>
-          <p class="brand-kicker">Current Page</p>
-          <h2>{{ currentTitle }}</h2>
+          <div class="admin-breadcrumb">Agent 平台 / {{ currentTitle }}</div>
+          <h1>{{ currentTitle }}</h1>
+        </div>
+        <div class="admin-header-extra">
+          <span class="admin-env-tag">后台管理</span>
         </div>
       </header>
 
-      <RouterView />
-    </main>
+      <main class="admin-content">
+        <RouterView />
+      </main>
+    </div>
   </div>
 </template>

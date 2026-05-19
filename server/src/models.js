@@ -43,6 +43,31 @@ const Agent = sequelize.define(
       allowNull: false,
       defaultValue: '',
     },
+    category: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'general',
+    },
+    market: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'general',
+    },
+    platform: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'generic',
+    },
+    scenario: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: '',
+    },
+    templateCode: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: '',
+    },
     endpoint: {
       type: DataTypes.STRING,
       allowNull: false,

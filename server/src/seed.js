@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { Agent, Workflow, AgentWorkflowBinding } = require('./models');
 
 const defaultWorkflowDefinition = {
@@ -50,6 +51,68 @@ const defaultWorkflowDefinition = {
 };
 
 async function seedIfNeeded() {
+  const removableWorkflowCodes = ['social-domestic-content', 'social-global-content'];
+  const removableAgents = await Agent.findAll({
+    where: {
+      [Op.or]: [
+        { code: { [Op.like]: 'xhs-content-operator%' } },
+        { code: { [Op.like]: 'zhihu-answer-expert%' } },
+        { code: { [Op.like]: 'douyin-script-studio%' } },
+        { code: { [Op.like]: 'bilibili-topic-planner%' } },
+        { code: { [Op.like]: 'youtube-growth-producer%' } },
+        { code: { [Op.like]: 'tiktok-viral-lab%' } },
+        { code: { [Op.like]: 'x-thread-writer%' } },
+        { code: { [Op.like]: 'linkedin-b2b-copy%' } },
+      ],
+    },
+  });
+  const removableWorkflows = await Workflow.findAll({
+    where: {
+      code: {
+        [Op.in]: removableWorkflowCodes,
+      },
+    },
+  });
+  const removableAgentIds = removableAgents.map((item) => item.id);
+  const removableWorkflowIds = removableWorkflows.map((item) => item.id);
+
+  if (removableAgentIds.length || removableWorkflowIds.length) {
+    const where = {};
+
+    if (removableAgentIds.length && removableWorkflowIds.length) {
+      where[Op.or] = [
+        { agentId: { [Op.in]: removableAgentIds } },
+        { workflowId: { [Op.in]: removableWorkflowIds } },
+      ];
+    } else if (removableAgentIds.length) {
+      where.agentId = { [Op.in]: removableAgentIds };
+    } else {
+      where.workflowId = { [Op.in]: removableWorkflowIds };
+    }
+
+    await AgentWorkflowBinding.destroy({ where });
+  }
+
+  if (removableAgentIds.length) {
+    await Agent.destroy({
+      where: {
+        id: {
+          [Op.in]: removableAgentIds,
+        },
+      },
+    });
+  }
+
+  if (removableWorkflowIds.length) {
+    await Workflow.destroy({
+      where: {
+        id: {
+          [Op.in]: removableWorkflowIds,
+        },
+      },
+    });
+  }
+
   const [supportWorkflow] = await Workflow.findOrCreate({
     where: { code: 'support-triage' },
     defaults: {
@@ -131,6 +194,7 @@ async function seedIfNeeded() {
       publishStatus: 'published',
       version: 3,
       owner: '客服中台',
+      category: 'medical_promotion',
       endpoint: 'http://localhost:4000/runtime/support-copilot',
       description: '对外提供客服问答和流程接入能力。',
       capabilities: ['faq', 'triage', 'workflow-binding'],
@@ -151,12 +215,34 @@ async function seedIfNeeded() {
       publishStatus: 'published',
       version: 2,
       owner: '销售增长',
+      category: 'domestic_marketing',
       endpoint: 'http://localhost:4000/runtime/sales-router',
       description: '针对销售场景进行意图判断和顾问分配。',
       capabilities: ['lead-routing', 'crm-sync', 'workflow-binding'],
       config: {
         model: 'gpt-4.1-mini',
         timeoutMs: 10000,
+      },
+    },
+  });
+
+  const [crossBorderAgent] = await Agent.findOrCreate({
+    where: { code: 'cross-border-growth' },
+    defaults: {
+      name: 'Cross Border Growth',
+      code: 'cross-border-growth',
+      type: 'assistant',
+      status: 'active',
+      publishStatus: 'published',
+      version: 1,
+      owner: '跨境增长',
+      category: 'cross_border',
+      endpoint: 'http://localhost:4000/runtime/cross-border-growth',
+      description: '面向国外渠道和跨境业务的增长咨询与流程接入。',
+      capabilities: ['cross-border-growth', 'channel-strategy', 'workflow-binding'],
+      config: {
+        model: 'gpt-4.1',
+        timeoutMs: 12000,
       },
     },
   });
@@ -201,16 +287,45 @@ async function seedIfNeeded() {
     },
   });
 
+  await AgentWorkflowBinding.findOrCreate({
+    where: {
+      agentId: crossBorderAgent.id,
+      workflowId: salesWorkflow.id,
+    },
+    defaults: {
+      mode: 'sync',
+      triggerType: 'manual',
+      status: 'enabled',
+      inputMapping: {
+        brief: '$input.query',
+        market: '$input.market',
+      },
+      outputMapping: {
+        answer: '$workflow.answer',
+        recommendation: '$workflow.nextAction',
+      },
+    },
+  });
+
   await supportAgent.update({
     publishStatus: 'published',
     version: supportAgent.version || 3,
     owner: supportAgent.owner || '客服中台',
+    category: 'medical_promotion',
   });
 
   await salesAgent.update({
     publishStatus: 'published',
     version: salesAgent.version || 2,
     owner: salesAgent.owner || '销售增长',
+    category: 'domestic_marketing',
+  });
+
+  await crossBorderAgent.update({
+    publishStatus: 'published',
+    version: crossBorderAgent.version || 1,
+    owner: crossBorderAgent.owner || '跨境增长',
+    category: 'cross_border',
   });
 }
 

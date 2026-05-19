@@ -17,6 +17,18 @@ const selectedAgent = computed(
 )
 
 const currentMessages = computed(() => sessions.value[selectedAgentId.value] || [])
+const agentOptions = computed(() =>
+  agents.value.map((item) => ({
+    value: item.id,
+    label: `${item.name} · ${item.code}`,
+    searchText: `${item.name} ${item.code} ${item.category || ''}`,
+  }))
+)
+
+function filterAgentOption(input, option) {
+  const text = `${option?.label || ''} ${option?.searchText || ''}`.toLowerCase()
+  return text.includes((input || '').toLowerCase())
+}
 
 function ensureSession(agentId) {
   if (!agentId || sessions.value[agentId]) {
@@ -29,7 +41,7 @@ function ensureSession(agentId) {
       {
         id: `welcome-${agentId}`,
         role: 'assistant',
-        content: '已进入当前 Agent 调试页。这里仅允许切换已发布 Agent。',
+        content: '已进入当前 Agent 调试页。这里是纯对话窗口，可通过上方搜索快速切换 Agent。',
       },
     ],
   }
@@ -126,109 +138,65 @@ onMounted(loadPublishedAgents)
 
 <template>
   <div class="page-stack">
-    <section class="hero-card">
-      <div>
-        <p class="brand-kicker">Published Agent Console</p>
-        <h3>已发布 Agent 切换页</h3>
-        <p>这个页面只展示已发布 Agent，左侧切换，右侧查看详情并直接做流程对话调试。</p>
+    <section class="chat-shell">
+      <div class="chat-shell-topbar">
+        <div class="chat-shell-topbar-left">
+          <a-select
+            v-model:value="selectedAgentId"
+            class="chat-agent-select"
+            show-search
+            allow-clear
+            :filter-option="filterAgentOption"
+            :options="agentOptions"
+            placeholder="搜索或选择 Agent"
+          />
+        </div>
+        <div class="chat-shell-meta">
+          <span>{{ selectedAgentDetail?.workflows?.[0]?.name || '未绑定流程' }}</span>
+          <a-tag v-if="selectedAgentDetail" color="blue">v{{ selectedAgentDetail.version }}</a-tag>
+        </div>
+      </div>
+
+      <div class="gpt-chat-scroll">
+        <div
+          v-for="item in currentMessages"
+          :key="item.id"
+          class="gpt-message-row"
+          :class="item.role"
+        >
+          <div class="gpt-avatar">{{ item.role === 'user' ? '我' : 'A' }}</div>
+          <div class="gpt-message-card">
+            <div class="gpt-message-title">
+              {{ item.role === 'user' ? '我' : selectedAgent?.name || 'Agent' }}
+            </div>
+            <p>{{ item.content }}</p>
+            <small v-if="item.workflowName">命中流程：{{ item.workflowName }}</small>
+          </div>
+        </div>
+
+        <div v-if="trace.length" class="gpt-trace-box">
+          <strong>当前执行轨迹</strong>
+          <div class="trace-list">
+            <div v-for="item in trace" :key="item.nodeId" class="trace-item">
+              <strong>Step {{ item.step }} · {{ item.label }}</strong>
+              <span>{{ item.kind }}</span>
+              <p>{{ item.prompt }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gpt-composer">
+        <a-textarea
+          v-model:value="chatInput"
+          :auto-size="{ minRows: 3, maxRows: 6 }"
+          placeholder="输入消息..."
+        />
+        <div class="gpt-composer-actions">
+          <span>{{ selectedAgent?.name || '未选择 Agent' }}</span>
+          <a-button type="primary" :loading="chatLoading" @click="sendMessage">发送</a-button>
+        </div>
       </div>
     </section>
-
-    <div class="console-layout">
-      <a-card title="已发布 Agent" :loading="loading" class="panel-card">
-        <div class="agent-switcher">
-          <button
-            v-for="item in agents"
-            :key="item.id"
-            class="agent-switcher-item"
-            :class="{ active: item.id === selectedAgentId }"
-            @click="selectedAgentId = item.id"
-          >
-            <strong>{{ item.name }}</strong>
-            <span>{{ item.code }} · v{{ item.version }}</span>
-            <span>{{ item.owner || '未设置负责人' }}</span>
-          </button>
-        </div>
-      </a-card>
-
-      <div class="page-stack">
-        <a-card title="Agent 详情" class="panel-card">
-          <div v-if="selectedAgentDetail" class="detail-grid">
-            <div class="detail-card highlight">
-              <span class="detail-label">Agent</span>
-              <strong class="detail-value">{{ selectedAgentDetail.name }}</strong>
-              <span class="detail-desc">{{ selectedAgentDetail.description || '暂无描述' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">发布状态</span>
-              <strong class="detail-value">{{ selectedAgentDetail.publishStatus }}</strong>
-              <span class="detail-desc">版本 v{{ selectedAgentDetail.version }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">当前流程</span>
-              <strong class="detail-value">
-                {{ selectedAgentDetail.workflows?.[0]?.name || '暂无已发布流程' }}
-              </strong>
-              <span class="detail-desc">{{ selectedAgentDetail.endpoint }}</span>
-            </div>
-          </div>
-
-          <div v-if="selectedAgentDetail" class="meta-section">
-            <div class="meta-block">
-              <strong>能力</strong>
-              <div class="tag-row">
-                <a-tag v-for="cap in selectedAgentDetail.capabilities || []" :key="cap">{{ cap }}</a-tag>
-              </div>
-            </div>
-            <div class="meta-block">
-              <strong>流程绑定</strong>
-              <div class="tag-row">
-                <a-tag v-for="item in selectedAgentDetail.bindings || []" :key="item.id" color="blue">
-                  {{ item.workflowName }} · {{ item.mode }}
-                </a-tag>
-              </div>
-            </div>
-          </div>
-        </a-card>
-
-        <div class="console-main">
-          <a-card title="对话窗口" class="panel-card">
-            <div class="chat-window">
-              <div
-                v-for="item in currentMessages"
-                :key="item.id"
-                class="chat-message"
-                :class="item.role"
-              >
-                <span class="chat-role">{{ item.role === 'user' ? '我' : selectedAgent?.name || 'Agent' }}</span>
-                <div class="chat-bubble">
-                  <p>{{ item.content }}</p>
-                  <small v-if="item.workflowName">流程：{{ item.workflowName }}</small>
-                </div>
-              </div>
-            </div>
-            <div class="chat-composer">
-              <a-textarea
-                v-model:value="chatInput"
-                :rows="4"
-                placeholder="输入问题，验证当前已发布 Agent 的接入效果"
-              />
-              <a-button type="primary" :loading="chatLoading" @click="sendMessage">发送消息</a-button>
-            </div>
-          </a-card>
-
-          <a-card title="执行轨迹" class="panel-card">
-            <div v-if="trace.length" class="trace-list">
-              <div v-for="item in trace" :key="item.nodeId" class="trace-item">
-                <strong>Step {{ item.step }} · {{ item.label }}</strong>
-                <span>{{ item.kind }}</span>
-                <p>{{ item.prompt }}</p>
-              </div>
-            </div>
-            <a-empty v-else description="发送消息后显示当前流程轨迹" />
-          </a-card>
-        </div>
-      </div>
-    </div>
   </div>
 </template>

@@ -452,10 +452,33 @@ select {
   box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.16);
 }
 
+.workflow-engine-canvas .vue-flow__edge-path,
+.workflow-engine-canvas .vue-flow__edge path {
+  stroke: #6b8cff;
+  stroke-width: 2.5px;
+}
+
+.workflow-engine-canvas .vue-flow__arrowhead path,
+.workflow-engine-canvas marker path {
+  fill: #6b8cff;
+}
+
+.workflow-engine-canvas .vue-flow__edge-text {
+  fill: #3557d6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflow-engine-canvas .vue-flow__edge-textbg {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #dbe4ff;
+  stroke-width: 1px;
+}
+
 .workflow-engine-canvas .vue-flow__edge.selected .vue-flow__edge-path,
 .workflow-engine-canvas .vue-flow__edge.selected path {
   stroke: #1677ff;
-  stroke-width: 2.5px;
+  stroke-width: 3px;
 }
 
 .workflow-canvas-shell {

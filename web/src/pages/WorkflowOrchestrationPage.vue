@@ -833,11 +833,26 @@ function addChildNode() {
       label: `子节点-${flowNodes.value.filter((node) => !['start', 'end'].includes(node.data?.kind)).length + 1}`,
       kind: 'tool',
       prompt: '配置子节点逻辑',
+      parentId: selectedNode.value.id,
     },
   })
 
-  const outgoingEdges = flowEdges.value.filter((edge) => edge.source === selectedNode.value.id)
-  const nextEdges = flowEdges.value.filter((edge) => edge.source !== selectedNode.value.id)
+  const parentOutgoingEdges = flowEdges.value.filter((edge) => edge.source === selectedNode.value.id)
+  const parentChildEdges = parentOutgoingEdges.filter((edge) => edge.target !== 'node-end')
+  const hasExistingChildBranch = parentChildEdges.length > 0
+
+  let nextEdges = [...flowEdges.value]
+
+  if (hasExistingChildBranch) {
+    // 已经存在子分支时，新子节点挂到同一父节点下，保持并行关系。
+    nextEdges = nextEdges.filter(
+      (edge) => !(edge.source === selectedNode.value.id && edge.target === 'node-end')
+    )
+  } else {
+    // 第一个子节点接管父节点原有的下游关系，避免父节点直接串到终点。
+    nextEdges = nextEdges.filter((edge) => edge.source !== selectedNode.value.id)
+  }
+
   nextEdges.push(
     createEdge(selectedNode.value.id, childId, '', {
       sourceHandle: 'source-bottom',
@@ -845,11 +860,38 @@ function addChildNode() {
     })
   )
 
-  if (outgoingEdges.length) {
-    outgoingEdges.forEach((edge) => {
+  if (hasExistingChildBranch) {
+    const downstreamEdgeMap = new Map()
+
+    parentChildEdges.forEach((edge) => {
+      const branchOutgoingEdges = flowEdges.value.filter((item) => item.source === edge.target)
+      branchOutgoingEdges.forEach((item) => {
+        downstreamEdgeMap.set(item.target, item)
+      })
+    })
+
+    if (downstreamEdgeMap.size > 0) {
+      downstreamEdgeMap.forEach((edge) => {
+        nextEdges.push(
+          createEdge(childId, edge.target, edge.label || '', {
+            sourceHandle: 'source-right',
+            targetHandle: edge.targetHandle || 'target-left',
+          })
+        )
+      })
+    } else {
+      nextEdges.push(
+        createEdge(childId, 'node-end', '', {
+          sourceHandle: 'source-right',
+          targetHandle: 'target-left',
+        })
+      )
+    }
+  } else if (parentOutgoingEdges.length) {
+    parentOutgoingEdges.forEach((edge) => {
       nextEdges.push(
         createEdge(childId, edge.target, edge.label || '', {
-          sourceHandle: 'source-right',
+          sourceHandle: edge.target === 'node-end' ? 'source-right' : edge.sourceHandle || 'source-right',
           targetHandle: edge.targetHandle || 'target-left',
         })
       )

@@ -286,35 +286,47 @@ onMounted(loadList)
         <span class="agent-filter-title">查询条件</span>
       </div>
       <div class="filter-grid">
-        <a-input
-          v-model:value="filters.keyword"
-          placeholder="搜索名称 / 编码 / 负责人"
-          @pressEnter="search"
-        />
-        <a-select
-          v-model:value="filters.category"
-          allow-clear
-          placeholder="分类"
-          :options="categoryOptions"
-        />
-        <a-select
-          v-model:value="filters.publishStatus"
-          allow-clear
-          placeholder="发布状态"
-          :options="[
-            { value: 'published', label: 'published' },
-            { value: 'draft', label: 'draft' },
-          ]"
-        />
-        <a-select
-          v-model:value="filters.status"
-          allow-clear
-          placeholder="运行状态"
-          :options="[
-            { value: 'active', label: 'active' },
-            { value: 'paused', label: 'paused' },
-          ]"
-        />
+        <div class="filter-field">
+          <span class="filter-field-title">关键字</span>
+          <a-input
+            v-model:value="filters.keyword"
+            placeholder="搜索名称 / 编码 / 负责人"
+            @pressEnter="search"
+          />
+        </div>
+        <div class="filter-field">
+          <span class="filter-field-title">分类</span>
+          <a-select
+            v-model:value="filters.category"
+            allow-clear
+            placeholder="选择分类"
+            :options="categoryOptions"
+          />
+        </div>
+        <div class="filter-field">
+          <span class="filter-field-title">发布状态</span>
+          <a-select
+            v-model:value="filters.publishStatus"
+            allow-clear
+            placeholder="选择发布状态"
+            :options="[
+              { value: 'published', label: 'published' },
+              { value: 'draft', label: 'draft' },
+            ]"
+          />
+        </div>
+        <div class="filter-field">
+          <span class="filter-field-title">运行状态</span>
+          <a-select
+            v-model:value="filters.status"
+            allow-clear
+            placeholder="选择运行状态"
+            :options="[
+              { value: 'active', label: 'active' },
+              { value: 'paused', label: 'paused' },
+            ]"
+          />
+        </div>
         <div class="filter-actions">
           <a-button type="primary" @click="search">查询</a-button>
           <a-button @click="reset">重置</a-button>

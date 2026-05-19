@@ -43,6 +43,8 @@ const vueFlowStore = ref(null)
 const zoomPercentage = ref(100)
 const editingNodeId = ref('')
 const editingNodeLabel = ref('')
+const editingNodePromptId = ref('')
+const editingNodePrompt = ref('')
 const editingEdgeId = ref('')
 const editingEdgeLabel = ref('')
 const createNodeContextMenu = reactive({
@@ -232,6 +234,20 @@ function startEditingEdgeLabel(edge) {
   })
 }
 
+function updateNodeDataById(nodeId, updater) {
+  flowNodes.value = flowNodes.value.map((node) =>
+    node.id === nodeId
+      ? {
+          ...node,
+          data: {
+            ...node.data,
+            ...updater(node),
+          },
+        }
+      : node
+  )
+}
+
 function saveEditingEdgeLabel(edgeId = editingEdgeId.value) {
   if (!edgeId) {
     return
@@ -296,7 +312,6 @@ function createEdge(source, target, label = '', options = {}) {
     sourceHandle: options.sourceHandle,
     targetHandle: options.targetHandle,
     label: normalizeEdgeLabel(label),
-    type: 'smoothstep',
     style: {
       stroke: '#6b8cff',
       strokeWidth: 2.5,
@@ -414,7 +429,7 @@ const EditableEdge = defineComponent({
             h(
               'div',
               {
-                class: 'workflow-edge-label-renderer',
+                class: 'workflow-edge-label-renderer nopan nodrag',
                 style: {
                   transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                 },
@@ -1086,6 +1101,7 @@ function clearSelectedNode() {
   closePropertyPanel()
   closeNodeContextMenu()
   stopEditingNodeLabel()
+  stopEditingNodePrompt()
 }
 
 function openNodeContextMenu(event, nodeId) {
@@ -1119,6 +1135,7 @@ function startEditingNodeLabel(nodeId) {
 
   editingNodeId.value = nodeId
   editingNodeLabel.value = node.data?.label || ''
+  stopEditingNodePrompt()
   setSelectedNode(nodeId)
   syncNodeForm(node)
   closeNodeContextMenu()
@@ -1134,17 +1151,9 @@ function saveEditingNodeLabel() {
     return message.warning('节点名称不能为空')
   }
 
-  flowNodes.value = flowNodes.value.map((node) =>
-    node.id === editingNodeId.value
-      ? {
-          ...node,
-          data: {
-            ...node.data,
-            label: nextLabel,
-          },
-        }
-      : node
-  )
+  updateNodeDataById(editingNodeId.value, () => ({
+    label: nextLabel,
+  }))
 
   if (selectedNodeId.value === editingNodeId.value) {
     nodeForm.label = nextLabel
@@ -1157,6 +1166,48 @@ function saveEditingNodeLabel() {
 function stopEditingNodeLabel() {
   editingNodeId.value = ''
   editingNodeLabel.value = ''
+}
+
+function startEditingNodePrompt(nodeId) {
+  const node = flowNodes.value.find((item) => item.id === nodeId)
+  if (!node) {
+    return
+  }
+
+  editingNodePromptId.value = nodeId
+  editingNodePrompt.value = node.data?.prompt || ''
+  stopEditingNodeLabel()
+  setSelectedNode(nodeId)
+  syncNodeForm(node)
+  closeNodeContextMenu()
+  nextTick(() => {
+    const input = document.querySelector(`textarea[data-node-prompt-editor="${nodeId}"]`)
+    input?.focus?.()
+    input?.select?.()
+  })
+}
+
+function saveEditingNodePrompt() {
+  if (!editingNodePromptId.value) {
+    return
+  }
+
+  const nextPrompt = editingNodePrompt.value.trim()
+  updateNodeDataById(editingNodePromptId.value, () => ({
+    prompt: nextPrompt,
+  }))
+
+  if (selectedNodeId.value === editingNodePromptId.value) {
+    nodeForm.prompt = nextPrompt
+  }
+
+  editingNodePromptId.value = ''
+  editingNodePrompt.value = ''
+}
+
+function stopEditingNodePrompt() {
+  editingNodePromptId.value = ''
+  editingNodePrompt.value = ''
 }
 
 function removeNodeById(nodeId) {
@@ -1589,6 +1640,20 @@ onMounted(async () => {
                     @blur="saveEditingNodeLabel"
                   />
                   <span v-else>{{ data.label }}</span>
+                </div>
+                <div class="workflow-node-card-content" @dblclick.stop="startEditingNodePrompt(id)">
+                  <textarea
+                    v-if="editingNodePromptId === id"
+                    v-model="editingNodePrompt"
+                    class="workflow-node-inline-textarea"
+                    :data-node-prompt-editor="id"
+                    @click.stop
+                    @dblclick.stop
+                    @keyup.enter.exact.stop="saveEditingNodePrompt"
+                    @keyup.esc.stop="stopEditingNodePrompt"
+                    @blur="saveEditingNodePrompt"
+                  />
+                  <span v-else>{{ data.prompt || '双击编辑节点内容' }}</span>
                 </div>
               </div>
             </template>

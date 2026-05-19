@@ -399,12 +399,43 @@ select {
   text-align: center;
 }
 
+.workflow-node-card-content {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  cursor: text;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .workflow-node-inline-input {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid #91caff;
   border-radius: 8px;
   outline: none;
+}
+
+.workflow-node-inline-textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid #91caff;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
 }
 
 .workflow-node-handle {

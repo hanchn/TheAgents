@@ -172,6 +172,18 @@ select {
   border-radius: 12px;
 }
 
+.agent-filter-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.agent-filter-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
 .brand-kicker {
   margin: 0 0 8px;
   font-size: 12px;

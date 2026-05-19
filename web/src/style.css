@@ -1141,8 +1141,22 @@ select {
   gap: 12px;
 }
 
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-field-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1;
+}
+
 .filter-actions {
   display: flex;
+  align-items: flex-end;
   gap: 10px;
 }
 

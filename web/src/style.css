@@ -197,7 +197,6 @@ select {
 }
 
 .workflow-panel-tip,
-.workflow-panel-tip,
 .workflow-binding-state span,
 .workflow-canvas-toolbar span:last-child {
   color: #6b7280;
@@ -267,6 +266,12 @@ select {
   gap: 12px;
 }
 
+.workflow-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .workflow-topbar-meta {
   display: flex;
   flex-direction: column;
@@ -293,6 +298,35 @@ select {
   border-radius: 12px;
   background: #fafafa;
   border: 1px solid #f0f0f0;
+}
+
+.workflow-engine-canvas .vue-flow__node {
+  min-width: 150px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid #d9d9d9;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.workflow-engine-canvas .vue-flow__node-default {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.workflow-engine-canvas .workflow-node-start {
+  border-color: #95de64;
+  background: #f6ffed;
+}
+
+.workflow-engine-canvas .workflow-node-end {
+  border-color: #ff7875;
+  background: #fff1f0;
+}
+
+.workflow-engine-canvas .workflow-node-default {
+  border-color: #91caff;
+  background: #ffffff;
 }
 
 .workflow-canvas-shell {
@@ -323,6 +357,13 @@ select {
   border-radius: 12px;
   background: #fafafa;
   border: 1px solid #f0f0f0;
+}
+
+.workflow-node-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .orchestration-grid {
@@ -736,5 +777,11 @@ pre {
 
   .chat-agent-select {
     width: 100%;
+  }
+
+  .workflow-topbar,
+  .workflow-topbar-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

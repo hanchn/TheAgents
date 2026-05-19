@@ -4,9 +4,19 @@ const { Agent, Workflow, AgentWorkflowBinding } = require('./models');
 const defaultWorkflowDefinition = {
   nodes: [
     {
+      id: 'node-start',
+      type: 'default',
+      position: { x: 80, y: 120 },
+      data: {
+        label: '开始',
+        kind: 'start',
+        prompt: '流程从这里开始。',
+      },
+    },
+    {
       id: 'node-intent',
       type: 'default',
-      position: { x: 120, y: 120 },
+      position: { x: 320, y: 120 },
       data: {
         label: '意图识别',
         kind: 'intent',
@@ -16,7 +26,7 @@ const defaultWorkflowDefinition = {
     {
       id: 'node-router',
       type: 'default',
-      position: { x: 420, y: 120 },
+      position: { x: 620, y: 120 },
       data: {
         label: '流程路由',
         kind: 'router',
@@ -24,28 +34,34 @@ const defaultWorkflowDefinition = {
       },
     },
     {
-      id: 'node-executor',
+      id: 'node-end',
       type: 'default',
-      position: { x: 720, y: 120 },
+      position: { x: 920, y: 120 },
       data: {
-        label: '任务执行',
-        kind: 'executor',
-        prompt: '执行工具调用、知识检索与结果聚合。',
+        label: '结束',
+        kind: 'end',
+        prompt: '流程在这里结束。',
       },
     },
   ],
   edges: [
     {
-      id: 'edge-1',
+      id: 'edge-start-intent',
+      source: 'node-start',
+      target: 'node-intent',
+      label: '开始执行',
+    },
+    {
+      id: 'edge-intent-router',
       source: 'node-intent',
       target: 'node-router',
       label: '识别完成',
     },
     {
-      id: 'edge-2',
+      id: 'edge-router-end',
       source: 'node-router',
-      target: 'node-executor',
-      label: '路由到执行',
+      target: 'node-end',
+      label: '结束流程',
     },
   ],
 };
@@ -136,9 +152,19 @@ async function seedIfNeeded() {
       definition: {
         nodes: [
           {
+            id: 'sales-start',
+            type: 'default',
+            position: { x: 80, y: 180 },
+            data: {
+              label: '开始',
+              kind: 'start',
+              prompt: '销售流程从这里开始。',
+            },
+          },
+          {
             id: 'sales-intent',
             type: 'default',
-            position: { x: 120, y: 180 },
+            position: { x: 300, y: 180 },
             data: {
               label: '线索识别',
               kind: 'intent',
@@ -148,7 +174,7 @@ async function seedIfNeeded() {
           {
             id: 'sales-score',
             type: 'default',
-            position: { x: 420, y: 180 },
+            position: { x: 560, y: 180 },
             data: {
               label: '线索评分',
               kind: 'router',
@@ -158,15 +184,31 @@ async function seedIfNeeded() {
           {
             id: 'sales-handoff',
             type: 'default',
-            position: { x: 720, y: 180 },
+            position: { x: 820, y: 180 },
             data: {
               label: '顾问分配',
               kind: 'tool',
               prompt: '把线索交给合适的销售顾问或自动回复。',
             },
           },
+          {
+            id: 'sales-end',
+            type: 'default',
+            position: { x: 1080, y: 180 },
+            data: {
+              label: '结束',
+              kind: 'end',
+              prompt: '销售流程在这里结束。',
+            },
+          },
         ],
         edges: [
+          {
+            id: 'sales-edge-0',
+            source: 'sales-start',
+            target: 'sales-intent',
+            label: '开始执行',
+          },
           {
             id: 'sales-edge-1',
             source: 'sales-intent',
@@ -179,8 +221,105 @@ async function seedIfNeeded() {
             target: 'sales-handoff',
             label: '分配顾问',
           },
+          {
+            id: 'sales-edge-3',
+            source: 'sales-handoff',
+            target: 'sales-end',
+            label: '结束流程',
+          },
         ],
       },
+    },
+  });
+
+  await supportWorkflow.update({
+    status: 'published',
+    description: '对用户问题进行识别、路由和执行的标准流程。',
+    definition: defaultWorkflowDefinition,
+  });
+
+  await salesWorkflow.update({
+    status: 'published',
+    description: '识别销售意图并分发给对应渠道或顾问。',
+    definition: {
+      nodes: [
+        {
+          id: 'sales-start',
+          type: 'default',
+          position: { x: 80, y: 180 },
+          data: {
+            label: '开始',
+            kind: 'start',
+            prompt: '销售流程从这里开始。',
+          },
+        },
+        {
+          id: 'sales-intent',
+          type: 'default',
+          position: { x: 300, y: 180 },
+          data: {
+            label: '线索识别',
+            kind: 'intent',
+            prompt: '识别潜在客户意图、行业和预算区间。',
+          },
+        },
+        {
+          id: 'sales-score',
+          type: 'default',
+          position: { x: 560, y: 180 },
+          data: {
+            label: '线索评分',
+            kind: 'router',
+            prompt: '根据规则给线索打分并决定分配优先级。',
+          },
+        },
+        {
+          id: 'sales-handoff',
+          type: 'default',
+          position: { x: 820, y: 180 },
+          data: {
+            label: '顾问分配',
+            kind: 'tool',
+            prompt: '把线索交给合适的销售顾问或自动回复。',
+          },
+        },
+        {
+          id: 'sales-end',
+          type: 'default',
+          position: { x: 1080, y: 180 },
+          data: {
+            label: '结束',
+            kind: 'end',
+            prompt: '销售流程在这里结束。',
+          },
+        },
+      ],
+      edges: [
+        {
+          id: 'sales-edge-0',
+          source: 'sales-start',
+          target: 'sales-intent',
+          label: '开始执行',
+        },
+        {
+          id: 'sales-edge-1',
+          source: 'sales-intent',
+          target: 'sales-score',
+          label: '进入评分',
+        },
+        {
+          id: 'sales-edge-2',
+          source: 'sales-score',
+          target: 'sales-handoff',
+          label: '分配顾问',
+        },
+        {
+          id: 'sales-edge-3',
+          source: 'sales-handoff',
+          target: 'sales-end',
+          label: '结束流程',
+        },
+      ],
     },
   });
 

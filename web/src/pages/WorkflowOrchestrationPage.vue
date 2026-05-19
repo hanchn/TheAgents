@@ -4,7 +4,7 @@ import { message } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
-import { MarkerType, VueFlow } from '@vue-flow/core'
+import { ConnectionLineType, MarkerType, Position, VueFlow } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
 import {
   createBinding,
@@ -57,6 +57,8 @@ function createStartNode() {
     position: { x: 80, y: 220 },
     class: 'workflow-node-start',
     draggable: false,
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       label: '开始',
       kind: 'start',
@@ -72,6 +74,8 @@ function createEndNode() {
     position: { x: 980, y: 220 },
     class: 'workflow-node-end',
     draggable: false,
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       label: '结束',
       kind: 'end',
@@ -89,6 +93,8 @@ function createDefaultWorkflowDefinition() {
         type: 'default',
         position: { x: 340, y: 220 },
         class: 'workflow-node-default',
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
         data: {
           label: '意图识别',
           kind: 'intent',
@@ -100,6 +106,8 @@ function createDefaultWorkflowDefinition() {
         type: 'default',
         position: { x: 620, y: 220 },
         class: 'workflow-node-default',
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
         data: {
           label: '流程路由',
           kind: 'router',
@@ -157,12 +165,6 @@ const currentBinding = computed(
       (item) => item.agentId === selectedAgentId.value && item.workflowId === selectedWorkflowId.value
     ) || null
 )
-const engineStats = computed(() => [
-  { label: '节点数', value: flowNodes.value.length },
-  { label: '连线数', value: flowEdges.value.length },
-  { label: '当前版本', value: currentWorkflow.value?.version || 0 },
-  { label: '绑定状态', value: currentBinding.value ? '已绑定' : '未绑定' },
-])
 
 const selectedNode = computed(
   () => flowNodes.value.find((item) => item.id === selectedNodeId.value) || null
@@ -185,6 +187,8 @@ function normalizeNode(node) {
           ? 'workflow-node-end'
           : 'workflow-node-default',
     draggable: kind !== 'start' && kind !== 'end',
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
   }
 }
 
@@ -339,6 +343,8 @@ function addNode(kind) {
       y: 120 + Math.floor((index - 1) / 2) * 140,
     },
     class: 'workflow-node-default',
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: {
       label: `${kind}-${index}`,
       kind,
@@ -370,9 +376,21 @@ function onConnect(connection) {
       ...connection,
       id: `edge-${Date.now()}`,
       label: 'next',
+      type: 'smoothstep',
       markerEnd: MarkerType.ArrowClosed,
     },
   ]
+}
+
+function layoutNodesHorizontally() {
+  const sortedNodes = ensureSystemNodes(flowNodes.value, flowEdges.value).nodes
+  flowNodes.value = sortedNodes.map((node, index) => ({
+    ...node,
+    position: {
+      x: 80 + index * 250,
+      y: 220,
+    },
+  }))
 }
 
 function onNodeClick(payload) {
@@ -577,13 +595,16 @@ onMounted(async () => {
               <span>流程选择</span>
               <span>选择后可直接进入画布编辑</span>
             </div>
-            <a-select
-              v-model:value="selectedWorkflowId"
-              class="workflow-select"
-              placeholder="选择流程"
-              :options="workflowOptions"
-            />
-            <a-button @click="removeSelectedNode">删除节点</a-button>
+            <div class="workflow-topbar-actions">
+              <a-select
+                v-model:value="selectedWorkflowId"
+                class="workflow-select"
+                placeholder="选择流程"
+                :options="workflowOptions"
+              />
+              <a-button @click="layoutNodesHorizontally">横向整理</a-button>
+              <a-button danger @click="removeSelectedNode">删除节点</a-button>
+            </div>
           </div>
         </template>
 
@@ -596,6 +617,11 @@ onMounted(async () => {
             v-model:nodes="flowNodes"
             v-model:edges="flowEdges"
             class="workflow-engine-canvas"
+            :default-edge-options="{
+              type: 'smoothstep',
+              markerEnd: MarkerType.ArrowClosed,
+            }"
+            :connection-line-type="ConnectionLineType.SmoothStep"
             @connect="onConnect"
             @node-click="onNodeClick"
           >
@@ -622,6 +648,11 @@ onMounted(async () => {
               {{ currentBinding ? `${currentBinding.mode} / ${currentBinding.triggerType}` : '保存后可直接建立绑定关系' }}
             </span>
           </div>
+          <div class="workflow-node-actions">
+            <a-button block @click="layoutNodesHorizontally">横向整理节点</a-button>
+            <a-button block @click="updateSelectedNode">保存当前节点配置</a-button>
+            <a-button danger block @click="removeSelectedNode">删除当前节点</a-button>
+          </div>
           <a-form-item label="流程名称">
             <a-input v-model:value="workflowForm.name" />
           </a-form-item>
@@ -642,6 +673,9 @@ onMounted(async () => {
           </a-form-item>
 
           <div class="workflow-panel-title">节点属性</div>
+          <div class="workflow-panel-tip">
+            {{ selectedNode ? `当前节点：${selectedNode.data?.label || selectedNode.id}` : '请先在画布中选中一个节点后再配置。' }}
+          </div>
 
           <a-form-item label="节点标题">
             <a-input
@@ -672,7 +706,6 @@ onMounted(async () => {
             <a-button block :loading="bindingSaving" @click="saveBinding">
               {{ currentBinding ? '更新 Agent 绑定' : '绑定到当前 Agent' }}
             </a-button>
-            <a-button block @click="updateSelectedNode">更新节点</a-button>
             <a-button type="primary" block :loading="saving" @click="createNewWorkflow">新建流程</a-button>
             <a-button block :loading="saving" @click="saveWorkflow()">保存流程</a-button>
             <a-button type="primary" ghost block :loading="saving" @click="saveWorkflow({ publish: true })">

@@ -342,10 +342,7 @@ onMounted(loadList)
             v-model:value="filters.publishStatus"
             allow-clear
             placeholder="选择发布状态"
-            :options="[
-              { value: 'published', label: 'published' },
-              { value: 'draft', label: 'draft' },
-            ]"
+            :options="publishStatusOptions"
           />
         </div>
         <div class="filter-field">
@@ -354,10 +351,7 @@ onMounted(loadList)
             v-model:value="filters.status"
             allow-clear
             placeholder="选择运行状态"
-            :options="[
-              { value: 'active', label: 'active' },
-              { value: 'paused', label: 'paused' },
-            ]"
+            :options="runtimeStatusOptions"
           />
         </div>
         <div class="filter-actions">
@@ -390,7 +384,7 @@ onMounted(loadList)
 
           <template v-if="column.key === 'publishStatus'">
             <a-tag :color="record.publishStatus === 'published' ? 'green' : 'default'">
-              {{ record.publishStatus }}
+              {{ getPublishStatusLabel(record.publishStatus) }}
             </a-tag>
           </template>
 
@@ -400,7 +394,7 @@ onMounted(loadList)
 
           <template v-if="column.key === 'status'">
             <a-tag :color="record.status === 'active' ? 'blue' : 'orange'">
-              {{ record.status }}
+              {{ getRuntimeStatusLabel(record.status) }}
             </a-tag>
           </template>
 
@@ -446,22 +440,10 @@ onMounted(loadList)
             <a-select v-model:value="agentForm.category" :options="categoryOptions" />
           </a-form-item>
           <a-form-item label="运行状态">
-            <a-select
-              v-model:value="agentForm.status"
-              :options="[
-                { value: 'active', label: 'active' },
-                { value: 'paused', label: 'paused' },
-              ]"
-            />
+            <a-select v-model:value="agentForm.status" :options="runtimeStatusOptions" />
           </a-form-item>
           <a-form-item label="发布状态">
-            <a-select
-              v-model:value="agentForm.publishStatus"
-              :options="[
-                { value: 'draft', label: 'draft' },
-                { value: 'published', label: 'published' },
-              ]"
-            />
+            <a-select v-model:value="agentForm.publishStatus" :options="publishStatusOptions" />
           </a-form-item>
           <a-form-item label="版本">
             <a-input-number v-model:value="agentForm.version" class="full-width" :min="1" />
@@ -476,6 +458,23 @@ onMounted(loadList)
         <a-form-item label="描述">
           <a-textarea v-model:value="agentForm.description" :rows="3" />
         </a-form-item>
+        <div class="schedule-card">
+          <div class="schedule-card-title">定时任务设置</div>
+          <div class="agent-form-grid">
+            <a-form-item label="启用定时">
+              <a-switch v-model:checked="agentForm.scheduleEnabled" />
+            </a-form-item>
+            <a-form-item label="Cron 表达式">
+              <a-input v-model:value="agentForm.scheduleCron" placeholder="例如：0 0 * * *" />
+            </a-form-item>
+            <a-form-item label="任务说明" class="schedule-span-2">
+              <a-input
+                v-model:value="agentForm.scheduleDescription"
+                placeholder="例如：每天凌晨同步知识库"
+              />
+            </a-form-item>
+          </div>
+        </div>
         <a-form-item label="运行配置 JSON">
           <a-textarea v-model:value="agentForm.configText" :rows="8" />
         </a-form-item>
@@ -508,7 +507,9 @@ onMounted(loadList)
             </div>
             <div class="detail-card">
               <span class="detail-label">发布与运行</span>
-              <strong class="detail-value">{{ detail.publishStatus }} / {{ detail.status }}</strong>
+              <strong class="detail-value">
+                {{ getPublishStatusLabel(detail.publishStatus) }} / {{ getRuntimeStatusLabel(detail.status) }}
+              </strong>
               <span class="detail-desc">版本 v{{ detail.version }}</span>
             </div>
           </div>

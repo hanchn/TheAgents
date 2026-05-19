@@ -28,6 +28,15 @@ const selectedNodeId = ref('')
 const flowNodes = ref([])
 const flowEdges = ref([])
 const bindingSaving = ref(false)
+const isEditorFullscreen = ref(false)
+const editingNodeId = ref('')
+const editingNodeLabel = ref('')
+const nodeContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  nodeId: '',
+})
 
 const workflowForm = reactive({
   name: '',
@@ -187,9 +196,18 @@ function normalizeNode(node) {
           ? 'workflow-node-end'
           : 'workflow-node-default',
     draggable: kind !== 'start' && kind !== 'end',
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+    selected: node?.id === selectedNodeId.value,
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
   }
+}
+
+function setSelectedNode(nodeId = '') {
+  selectedNodeId.value = nodeId
+  flowNodes.value = flowNodes.value.map((node) => ({
+    ...node,
+    selected: node.id === nodeId,
+  }))
 }
 
 function ensureSystemNodes(nodes = [], edges = []) {
@@ -266,6 +284,7 @@ function loadWorkflowToCanvas(workflow) {
   flowNodes.value = normalized.nodes
   flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value[0] || null)
+  setSelectedNode(flowNodes.value[0]?.id || '')
 }
 
 function syncNodeForm(node) {
@@ -355,6 +374,68 @@ function addNode(kind) {
   const nodesWithoutEnd = flowNodes.value.filter((item) => item.id !== 'node-end')
   flowNodes.value = [...nodesWithoutEnd, node, endNode || createEndNode()]
   syncNodeForm(node)
+  setSelectedNode(node.id)
+}
+
+function addChildNode() {
+  if (!selectedNode.value) {
+    return message.warning('请先选中一个节点')
+  }
+
+  if (selectedNode.value.data?.kind === 'end') {
+    return message.warning('结束节点不能再添加子节点')
+  }
+
+  const childId = `node-${Date.now()}`
+  const childNode = normalizeNode({
+    id: childId,
+    type: 'default',
+    position: {
+      x: (selectedNode.value.position?.x || 80) + 260,
+      y: selectedNode.value.position?.y || 220,
+    },
+    data: {
+      label: `子节点-${flowNodes.value.filter((node) => !['start', 'end'].includes(node.data?.kind)).length + 1}`,
+      kind: 'tool',
+      prompt: '配置子节点逻辑',
+    },
+  })
+
+  const edgeToEnd = flowEdges.value.find(
+    (edge) => edge.source === selectedNode.value.id && edge.target === 'node-end'
+  )
+
+  flowNodes.value = [
+    ...flowNodes.value.filter((node) => node.id !== 'node-end'),
+    childNode,
+    flowNodes.value.find((node) => node.id === 'node-end') || createEndNode(),
+  ]
+
+  const nextEdges = flowEdges.value.filter((edge) => edge.id !== edgeToEnd?.id)
+  nextEdges.push({
+    id: `edge-${selectedNode.value.id}-${childId}`,
+    source: selectedNode.value.id,
+    target: childId,
+    label: '进入子节点',
+    type: 'smoothstep',
+    markerEnd: MarkerType.ArrowClosed,
+  })
+
+  if (edgeToEnd) {
+    nextEdges.push({
+      id: `edge-${childId}-end`,
+      source: childId,
+      target: 'node-end',
+      label: '结束流程',
+      type: 'smoothstep',
+      markerEnd: MarkerType.ArrowClosed,
+    })
+  }
+
+  flowEdges.value = nextEdges
+  syncNodeForm(childNode)
+  setSelectedNode(childId)
+  closeNodeContextMenu()
 }
 
 function onConnect(connection) {
@@ -395,6 +476,105 @@ function layoutNodesHorizontally() {
 
 function onNodeClick(payload) {
   syncNodeForm(payload.node)
+  setSelectedNode(payload.node.id)
+  closeNodeContextMenu()
+}
+
+function clearSelectedNode() {
+  syncNodeForm(null)
+  setSelectedNode('')
+  closeNodeContextMenu()
+  stopEditingNodeLabel()
+}
+
+function openNodeContextMenu(event, nodeId) {
+  event.preventDefault()
+  event.stopPropagation()
+  setSelectedNode(nodeId)
+  syncNodeForm(flowNodes.value.find((node) => node.id === nodeId) || null)
+  nodeContextMenu.visible = true
+  nodeContextMenu.x = event.clientX
+  nodeContextMenu.y = event.clientY
+  nodeContextMenu.nodeId = nodeId
+}
+
+function closeNodeContextMenu() {
+  nodeContextMenu.visible = false
+  nodeContextMenu.x = 0
+  nodeContextMenu.y = 0
+  nodeContextMenu.nodeId = ''
+}
+
+function startEditingNodeLabel(nodeId) {
+  const node = flowNodes.value.find((item) => item.id === nodeId)
+  if (!node) {
+    return
+  }
+
+  if (['start', 'end'].includes(node.data?.kind)) {
+    return message.warning('开始节点和结束节点名称不允许直接修改')
+  }
+
+  editingNodeId.value = nodeId
+  editingNodeLabel.value = node.data?.label || ''
+  setSelectedNode(nodeId)
+  syncNodeForm(node)
+  closeNodeContextMenu()
+}
+
+function saveEditingNodeLabel() {
+  if (!editingNodeId.value) {
+    return
+  }
+
+  const nextLabel = editingNodeLabel.value.trim()
+  if (!nextLabel) {
+    return message.warning('节点名称不能为空')
+  }
+
+  flowNodes.value = flowNodes.value.map((node) =>
+    node.id === editingNodeId.value
+      ? {
+          ...node,
+          data: {
+            ...node.data,
+            label: nextLabel,
+          },
+        }
+      : node
+  )
+
+  if (selectedNodeId.value === editingNodeId.value) {
+    nodeForm.label = nextLabel
+  }
+
+  editingNodeId.value = ''
+  editingNodeLabel.value = ''
+}
+
+function stopEditingNodeLabel() {
+  editingNodeId.value = ''
+  editingNodeLabel.value = ''
+}
+
+function removeNodeById(nodeId) {
+  const node = flowNodes.value.find((item) => item.id === nodeId)
+  if (!node) {
+    return
+  }
+
+  if (['start', 'end'].includes(node.data?.kind)) {
+    return message.warning('开始节点和结束节点不允许删除')
+  }
+
+  flowNodes.value = flowNodes.value.filter((item) => item.id !== nodeId)
+  flowEdges.value = flowEdges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+  const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
+  syncNodeForm(flowNodes.value[0] || null)
+  setSelectedNode(flowNodes.value[0]?.id || '')
+  closeNodeContextMenu()
 }
 
 function updateSelectedNode() {
@@ -417,6 +597,7 @@ function updateSelectedNode() {
           }
         : node
     )
+    setSelectedNode(selectedNodeId.value)
     return
   }
 
@@ -433,23 +614,14 @@ function updateSelectedNode() {
         }
       : node
   )
+  setSelectedNode(selectedNodeId.value)
 }
 
 function removeSelectedNode() {
   if (!selectedNodeId.value) {
     return
   }
-
-  const nodeKind = selectedNode.value?.data?.kind
-  if (nodeKind === 'start' || nodeKind === 'end') {
-    return message.warning('开始节点和结束节点不允许删除')
-  }
-
-  flowNodes.value = flowNodes.value.filter((node) => node.id !== selectedNodeId.value)
-  flowEdges.value = flowEdges.value.filter(
-    (edge) => edge.source !== selectedNodeId.value && edge.target !== selectedNodeId.value
-  )
-  syncNodeForm(flowNodes.value[0] || null)
+  removeNodeById(selectedNodeId.value)
 }
 
 async function createNewWorkflow() {
@@ -462,6 +634,7 @@ async function createNewWorkflow() {
     const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
     flowNodes.value = normalized.nodes
     flowEdges.value = normalized.edges
+    setSelectedNode(selectedNodeId.value || normalized.nodes[0]?.id || '')
     const response = await createWorkflow({
       name: workflowForm.name.trim(),
       code: normalizeCode(workflowForm.code || workflowForm.name),
@@ -493,6 +666,7 @@ async function saveWorkflow({ publish = false } = {}) {
     const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
     flowNodes.value = normalized.nodes
     flowEdges.value = normalized.edges
+    setSelectedNode(selectedNodeId.value || normalized.nodes[0]?.id || '')
     await updateWorkflow(selectedWorkflowId.value, {
       name: workflowForm.name.trim(),
       code: normalizeCode(workflowForm.code || workflowForm.name),
@@ -566,13 +740,14 @@ onMounted(async () => {
     flowNodes.value = normalized.nodes
     flowEdges.value = normalized.edges
     syncNodeForm(flowNodes.value[0] || null)
+    setSelectedNode(flowNodes.value[0]?.id || '')
   }
 })
 </script>
 
 <template>
   <div class="page-stack">
-    <div class="workflow-engine-layout">
+    <div class="workflow-engine-layout" :class="{ 'workflow-engine-layout-fullscreen': isEditorFullscreen }">
       <a-card title="节点面板" class="panel-card workflow-panel-card">
         <div class="workflow-panel-tip">拖拽能力后续可继续补，这一版先保证节点新增、编辑、连线、绑定闭环。</div>
         <div class="workflow-palette">
@@ -602,7 +777,11 @@ onMounted(async () => {
                 placeholder="选择流程"
                 :options="workflowOptions"
               />
+              <a-button type="primary" ghost @click="addChildNode">添加子节点</a-button>
               <a-button @click="layoutNodesHorizontally">横向整理</a-button>
+              <a-button @click="isEditorFullscreen = !isEditorFullscreen">
+                {{ isEditorFullscreen ? '退出全屏' : '全屏编辑' }}
+              </a-button>
               <a-button danger @click="removeSelectedNode">删除节点</a-button>
             </div>
           </div>
@@ -624,11 +803,44 @@ onMounted(async () => {
             :connection-line-type="ConnectionLineType.SmoothStep"
             @connect="onConnect"
             @node-click="onNodeClick"
+            @pane-click="clearSelectedNode"
           >
+            <template #node-default="{ id, data, selected }">
+              <div
+                class="workflow-node-card"
+                :class="{ 'is-selected': selected }"
+                @contextmenu="openNodeContextMenu($event, id)"
+              >
+                <div class="workflow-node-card-kind">{{ data.kind }}</div>
+                <div class="workflow-node-card-title" @dblclick.stop="startEditingNodeLabel(id)">
+                  <input
+                    v-if="editingNodeId === id"
+                    v-model:value="editingNodeLabel"
+                    class="workflow-node-inline-input"
+                    @click.stop
+                    @dblclick.stop
+                    @keyup.enter.stop="saveEditingNodeLabel"
+                    @keyup.esc.stop="stopEditingNodeLabel"
+                    @blur="saveEditingNodeLabel"
+                  />
+                  <span v-else>{{ data.label }}</span>
+                </div>
+                <div class="workflow-node-card-desc">{{ data.prompt }}</div>
+              </div>
+            </template>
             <Background />
             <MiniMap />
             <Controls />
           </VueFlow>
+          <div
+            v-if="nodeContextMenu.visible"
+            class="workflow-context-menu"
+            :style="{ left: `${nodeContextMenu.x}px`, top: `${nodeContextMenu.y}px` }"
+          >
+            <button type="button" @click="addChildNode">添加子节点</button>
+            <button type="button" @click="startEditingNodeLabel(nodeContextMenu.nodeId)">重命名节点</button>
+            <button type="button" class="danger" @click="removeNodeById(nodeContextMenu.nodeId)">删除节点</button>
+          </div>
         </div>
       </a-card>
 
@@ -649,6 +861,7 @@ onMounted(async () => {
             </span>
           </div>
           <div class="workflow-node-actions">
+            <a-button type="primary" block @click="addChildNode">添加子节点</a-button>
             <a-button block @click="layoutNodesHorizontally">横向整理节点</a-button>
             <a-button block @click="updateSelectedNode">保存当前节点配置</a-button>
             <a-button danger block @click="removeSelectedNode">删除当前节点</a-button>

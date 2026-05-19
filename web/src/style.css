@@ -196,6 +196,14 @@ select {
   min-height: calc(100vh - 168px);
 }
 
+.workflow-engine-layout-fullscreen {
+  position: fixed;
+  inset: 16px;
+  z-index: 1200;
+  padding: 0;
+  background: #f5f7fa;
+}
+
 .workflow-panel-tip,
 .workflow-binding-state span,
 .workflow-canvas-toolbar span:last-child {
@@ -213,6 +221,11 @@ select {
 
 .workflow-canvas-card {
   min-width: 0;
+}
+
+.workflow-engine-layout-fullscreen .workflow-canvas-card,
+.workflow-engine-layout-fullscreen .workflow-panel-card {
+  height: calc(100vh - 32px);
 }
 
 .workflow-palette {
@@ -300,12 +313,23 @@ select {
   border: 1px solid #f0f0f0;
 }
 
+.workflow-engine-layout-fullscreen .workflow-engine-canvas {
+  height: calc(100vh - 150px);
+  min-height: calc(100vh - 150px);
+}
+
 .workflow-engine-canvas .vue-flow__node {
   min-width: 150px;
   padding: 0;
   border-radius: 12px;
   border: 1px solid #d9d9d9;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.workflow-engine-canvas .vue-flow__node.selected,
+.workflow-engine-canvas .vue-flow__node:focus-visible {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.18);
 }
 
 .workflow-engine-canvas .vue-flow__node-default {
@@ -327,6 +351,16 @@ select {
 .workflow-engine-canvas .workflow-node-default {
   border-color: #91caff;
   background: #ffffff;
+}
+
+.workflow-engine-canvas .workflow-node-start.selected {
+  border-color: #52c41a;
+  box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.16);
+}
+
+.workflow-engine-canvas .workflow-node-end.selected {
+  border-color: #ff4d4f;
+  box-shadow: 0 0 0 3px rgba(255, 77, 79, 0.16);
 }
 
 .workflow-canvas-shell {
@@ -364,6 +398,12 @@ select {
   grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.workflow-engine-layout-fullscreen .workflow-node-actions,
+.workflow-engine-layout-fullscreen .workflow-binding-state,
+.workflow-engine-layout-fullscreen .workflow-panel-tip {
+  flex-shrink: 0;
 }
 
 .orchestration-grid {

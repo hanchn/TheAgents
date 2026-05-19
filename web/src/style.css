@@ -612,6 +612,25 @@ select {
   background: #f8fafc;
 }
 
+.workflow-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.workflow-close-button:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #111827;
+}
+
 .workflow-floating-actions {
   position: absolute;
   top: 16px;

@@ -1,7 +1,8 @@
 <script setup>
-import { Fragment, computed, defineComponent, h, markRaw, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { CloseOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Background } from '@vue-flow/background'
 import {
   BaseEdge,
@@ -25,6 +26,7 @@ import {
 } from '../lib/api'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const workflows = ref([])
@@ -338,163 +340,25 @@ function createEdge(source, target, label = '', options = {}) {
   }
 }
 
-const EditableEdge = defineComponent({
-  name: 'EditableEdge',
-  props: {
-    id: {
-      type: String,
-      required: true,
-    },
-    sourceX: {
-      type: Number,
-      required: true,
-    },
-    sourceY: {
-      type: Number,
-      required: true,
-    },
-    targetX: {
-      type: Number,
-      required: true,
-    },
-    targetY: {
-      type: Number,
-      required: true,
-    },
-    sourcePosition: {
-      type: String,
-      required: true,
-    },
-    targetPosition: {
-      type: String,
-      required: true,
-    },
-    markerEnd: {
-      type: [String, Object],
-      default: undefined,
-    },
-    style: {
-      type: Object,
-      default: () => ({}),
-    },
-    label: {
-      type: String,
-      default: '',
-    },
-    selected: {
-      type: Boolean,
-      default: false,
-    },
-    source: {
-      type: String,
-      required: true,
-    },
-    target: {
-      type: String,
-      required: true,
-    },
-    sourceHandleId: {
-      type: String,
-      default: '',
-    },
-    targetHandleId: {
-      type: String,
-      default: '',
-    },
-  },
-  setup(props) {
-    return () => {
-      const [path, labelX, labelY] = getSmoothStepPath({
-        sourceX: props.sourceX,
-        sourceY: props.sourceY,
-        targetX: props.targetX,
-        targetY: props.targetY,
-        sourcePosition: props.sourcePosition,
-        targetPosition: props.targetPosition,
-      })
-      const isEditing = editingEdgeId.value === props.id
-      const hasLabel = Boolean((props.label || '').trim())
+function getEditableEdgeMeta(edge) {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX: edge.sourceX,
+    sourceY: edge.sourceY,
+    targetX: edge.targetX,
+    targetY: edge.targetY,
+    sourcePosition: edge.sourcePosition,
+    targetPosition: edge.targetPosition,
+  })
 
-      return h(Fragment, null, [
-        h(BaseEdge, {
-          id: props.id,
-          path,
-          markerEnd: props.markerEnd,
-          style: props.style,
-        }),
-        h(
-          EdgeLabelRenderer,
-          null,
-          () =>
-            h(
-              'div',
-              {
-                class: 'workflow-edge-label-renderer nopan nodrag',
-                style: {
-                  transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-                },
-              },
-              [
-                isEditing
-                  ? h('input', {
-                      class: 'workflow-edge-inline-input',
-                      value: editingEdgeLabel.value,
-                      'data-edge-editor': props.id,
-                      placeholder: '输入连线文案',
-                      onClick: (event) => event.stopPropagation(),
-                      onDblclick: (event) => event.stopPropagation(),
-                      onInput: (event) => {
-                        editingEdgeLabel.value = event.target.value
-                      },
-                      onKeydown: (event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          saveEditingEdgeLabel(props.id)
-                        }
-                        if (event.key === 'Escape') {
-                          event.preventDefault()
-                          cancelEditingEdgeLabel()
-                        }
-                      },
-                      onBlur: () => saveEditingEdgeLabel(props.id),
-                    })
-                  : h(
-                      'button',
-                      {
-                        type: 'button',
-                        class: [
-                          'workflow-edge-label-chip',
-                          hasLabel ? '' : 'is-empty',
-                          props.selected ? 'is-selected' : '',
-                        ],
-                        onClick: (event) => {
-                          event.stopPropagation()
-                          setSelectedEdge(props.id)
-                        },
-                        onDblclick: (event) => {
-                          event.stopPropagation()
-                          startEditingEdgeLabel({
-                            id: props.id,
-                            label: props.label,
-                            source: props.source,
-                            target: props.target,
-                            sourceHandle: props.sourceHandleId,
-                            targetHandle: props.targetHandleId,
-                          })
-                        },
-                      },
-                      hasLabel ? props.label : '双击编辑文案'
-                    ),
-              ]
-            )
-        ),
-      ])
-    }
-  },
-})
+  return {
+    path,
+    labelX,
+    labelY,
+  }
+}
 
-const edgeTypes = {
-  editable: markRaw(EditableEdge),
+function closeOrchestration() {
+  router.push('/agents')
 }
 
 function sortBusinessNodes(nodes = []) {
@@ -1472,6 +1336,9 @@ onMounted(async () => {
               <a-button type="primary" ghost :loading="saving" @click="saveWorkflow({ publish: true })">
                 发布流程
               </a-button>
+              <button type="button" class="workflow-close-button" @click="closeOrchestration">
+                <CloseOutlined />
+              </button>
             </div>
           </div>
         </template>
@@ -1550,7 +1417,6 @@ onMounted(async () => {
           <VueFlow
             v-model:nodes="flowNodes"
             v-model:edges="flowEdges"
-            :edge-types="edgeTypes"
             class="workflow-engine-canvas"
             :default-edge-options="{
               type: 'smoothstep',
@@ -1565,6 +1431,57 @@ onMounted(async () => {
             @edge-click="onEdgeClick"
             @pane-click="clearSelectedNode"
           >
+            <template #edge-editable="edgeProps">
+              <BaseEdge
+                :id="edgeProps.id"
+                :path="getEditableEdgeMeta(edgeProps).path"
+                :marker-end="edgeProps.markerEnd"
+                :style="edgeProps.style"
+              />
+              <EdgeLabelRenderer>
+                <div
+                  class="workflow-edge-label-renderer nopan nodrag"
+                  :style="{
+                    transform: `translate(-50%, -50%) translate(${getEditableEdgeMeta(edgeProps).labelX}px, ${getEditableEdgeMeta(edgeProps).labelY}px)`,
+                  }"
+                >
+                  <input
+                    v-if="editingEdgeId === edgeProps.id"
+                    v-model="editingEdgeLabel"
+                    class="workflow-edge-inline-input"
+                    :data-edge-editor="edgeProps.id"
+                    placeholder="输入连线文案"
+                    @click.stop
+                    @dblclick.stop
+                    @keyup.enter.stop="saveEditingEdgeLabel(edgeProps.id)"
+                    @keyup.esc.stop="cancelEditingEdgeLabel"
+                    @blur="saveEditingEdgeLabel(edgeProps.id)"
+                  />
+                  <button
+                    v-else
+                    type="button"
+                    class="workflow-edge-label-chip"
+                    :class="{
+                      'is-empty': !(edgeProps.label || '').trim(),
+                      'is-selected': edgeProps.selected,
+                    }"
+                    @click.stop="setSelectedEdge(edgeProps.id)"
+                    @dblclick.stop="
+                      startEditingEdgeLabel({
+                        id: edgeProps.id,
+                        label: edgeProps.label,
+                        source: edgeProps.source,
+                        target: edgeProps.target,
+                        sourceHandle: edgeProps.sourceHandleId,
+                        targetHandle: edgeProps.targetHandleId,
+                      })
+                    "
+                  >
+                    {{ (edgeProps.label || '').trim() || '双击编辑文案' }}
+                  </button>
+                </div>
+              </EdgeLabelRenderer>
+            </template>
             <template #node-default="{ id, data, selected }">
               <div
                 class="workflow-node-card"

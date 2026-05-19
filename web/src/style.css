@@ -481,8 +481,8 @@ select {
 }
 
 .workflow-edge-label-chip {
-  min-width: 64px;
-  padding: 3px 10px;
+  min-width: 92px;
+  padding: 4px 12px;
   border: 1px solid #c7d2fe;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
@@ -497,6 +497,8 @@ select {
 
 .workflow-edge-label-chip.is-empty {
   border-style: dashed;
+  border-color: #bfd0ff;
+  background: rgba(248, 250, 255, 0.98);
   color: #6b7280;
 }
 

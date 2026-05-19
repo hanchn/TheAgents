@@ -454,6 +454,10 @@ const EditableEdge = defineComponent({
                         ],
                         onClick: (event) => {
                           event.stopPropagation()
+                          setSelectedEdge(props.id)
+                        },
+                        onDblclick: (event) => {
+                          event.stopPropagation()
                           startEditingEdgeLabel({
                             id: props.id,
                             label: props.label,
@@ -464,7 +468,7 @@ const EditableEdge = defineComponent({
                           })
                         },
                       },
-                      hasLabel ? props.label : '编辑文案'
+                      hasLabel ? props.label : '双击编辑文案'
                     ),
               ]
             )
@@ -799,42 +803,6 @@ function ensureSystemNodes(nodes = [], edges = []) {
   })
   nextEdges = [...uniqueEdgeMap.values()]
 
-  const hasStartEdge = nextEdges.some((edge) => edge.source === 'node-start')
-  const hasEndEdge = nextEdges.some((edge) => edge.target === 'node-end')
-  const firstBusinessNode = orderedNodes.find((node) => node.id !== 'node-start' && node.id !== 'node-end')
-  const lastBusinessNode = [...orderedNodes].reverse().find((node) => node.id !== 'node-start' && node.id !== 'node-end')
-
-  if (!firstBusinessNode && !lastBusinessNode) {
-    nextEdges = [
-      createEdge('node-start', 'node-end', '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      }),
-    ]
-  }
-
-  if (firstBusinessNode) {
-    nextEdges = nextEdges.filter((edge) => !(edge.source === 'node-start' && edge.target === 'node-end'))
-  }
-
-  if (firstBusinessNode && !hasStartEdge) {
-    nextEdges.unshift(
-      createEdge('node-start', firstBusinessNode.id, '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      })
-    )
-  }
-
-  if (lastBusinessNode && !hasEndEdge) {
-    nextEdges.push(
-      createEdge(lastBusinessNode.id, 'node-end', '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      })
-    )
-  }
-
   const positionedNodes = layoutNodesByGraph(orderedNodes, nextEdges)
   const positionedNodeMap = new Map(positionedNodes.map((node) => [node.id, node]))
   const normalizedEdges = nextEdges.map((edge) =>
@@ -977,38 +945,7 @@ function addNode(kind, options = {}) {
     return
   }
 
-  const nextNodes = [...flowNodes.value, node]
-  const nextEdges = flowEdges.value.filter(
-    (edge) =>
-      !(
-        (lastBusinessNode && edge.source === lastBusinessNode.id && edge.target === 'node-end') ||
-        (!lastBusinessNode && edge.source === 'node-start' && edge.target === 'node-end')
-      )
-  )
-
-  if (lastBusinessNode) {
-    nextEdges.push(
-      createEdge(lastBusinessNode.id, node.id, '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      })
-    )
-  } else {
-    nextEdges.push(
-      createEdge('node-start', node.id, '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      })
-    )
-  }
-  nextEdges.push(
-    createEdge(node.id, 'node-end', '', {
-      sourceHandle: 'source-right',
-      targetHandle: 'target-left',
-    })
-  )
-
-  const normalized = ensureSystemNodes(nextNodes, nextEdges)
+  const normalized = ensureSystemNodes([...flowNodes.value, node], flowEdges.value)
   flowNodes.value = normalized.nodes
   flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value.find((item) => item.id === node.id) || null)
@@ -1048,73 +985,13 @@ function addChildNode() {
     },
   })
 
-  const parentOutgoingEdges = flowEdges.value.filter((edge) => edge.source === selectedNode.value.id)
-  const parentChildEdges = parentOutgoingEdges.filter((edge) => edge.target !== 'node-end')
-  const hasExistingChildBranch = parentChildEdges.length > 0
-
-  let nextEdges = [...flowEdges.value]
-
-  if (hasExistingChildBranch) {
-    // 已经存在子分支时，新子节点挂到同一父节点下，保持并行关系。
-    nextEdges = nextEdges.filter(
-      (edge) => !(edge.source === selectedNode.value.id && edge.target === 'node-end')
-    )
-  } else {
-    // 第一个子节点接管父节点原有的下游关系，避免父节点直接串到终点。
-    nextEdges = nextEdges.filter((edge) => edge.source !== selectedNode.value.id)
-  }
-
-  nextEdges.push(
+  const nextEdges = [
+    ...flowEdges.value,
     createEdge(selectedNode.value.id, childId, '', {
       sourceHandle: 'source-bottom',
       targetHandle: 'target-top',
-    })
-  )
-
-  if (hasExistingChildBranch) {
-    const downstreamEdgeMap = new Map()
-
-    parentChildEdges.forEach((edge) => {
-      const branchOutgoingEdges = flowEdges.value.filter((item) => item.source === edge.target)
-      branchOutgoingEdges.forEach((item) => {
-        downstreamEdgeMap.set(item.target, item)
-      })
-    })
-
-    if (downstreamEdgeMap.size > 0) {
-      downstreamEdgeMap.forEach((edge) => {
-        nextEdges.push(
-          createEdge(childId, edge.target, edge.label || '', {
-            sourceHandle: 'source-right',
-            targetHandle: edge.targetHandle || 'target-left',
-          })
-        )
-      })
-    } else {
-      nextEdges.push(
-        createEdge(childId, 'node-end', '', {
-          sourceHandle: 'source-right',
-          targetHandle: 'target-left',
-        })
-      )
-    }
-  } else if (parentOutgoingEdges.length) {
-    parentOutgoingEdges.forEach((edge) => {
-      nextEdges.push(
-        createEdge(childId, edge.target, edge.label || '', {
-          sourceHandle: edge.target === 'node-end' ? 'source-right' : edge.sourceHandle || 'source-right',
-          targetHandle: edge.targetHandle || 'target-left',
-        })
-      )
-    })
-  } else {
-    nextEdges.push(
-      createEdge(childId, 'node-end', '', {
-        sourceHandle: 'source-right',
-        targetHandle: 'target-left',
-      })
-    )
-  }
+    }),
+  ]
 
   const normalized = ensureSystemNodes([...flowNodes.value, childNode], nextEdges)
   flowNodes.value = normalized.nodes

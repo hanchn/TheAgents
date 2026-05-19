@@ -16,8 +16,26 @@ const categoryOptions = [
   { value: 'general', label: '未分类' },
 ]
 
+const publishStatusOptions = [
+  { value: 'draft', label: '草稿' },
+  { value: 'published', label: '已发布' },
+]
+
+const runtimeStatusOptions = [
+  { value: 'active', label: '运行中' },
+  { value: 'paused', label: '已暂停' },
+]
+
 function getCategoryLabel(value) {
   return categoryOptions.find((item) => item.value === value)?.label || '未分类'
+}
+
+function getPublishStatusLabel(value) {
+  return publishStatusOptions.find((item) => item.value === value)?.label || value || '-'
+}
+
+function getRuntimeStatusLabel(value) {
+  return runtimeStatusOptions.find((item) => item.value === value)?.label || value || '-'
 }
 
 const router = useRouter()
@@ -52,6 +70,9 @@ const agentForm = reactive({
   endpoint: '',
   description: '',
   capabilitiesText: '',
+  scheduleEnabled: false,
+  scheduleCron: '',
+  scheduleDescription: '',
   configText: '{\n  "model": "gpt-4.1",\n  "timeoutMs": 12000\n}',
 })
 
@@ -177,6 +198,9 @@ function resetForm() {
   agentForm.endpoint = ''
   agentForm.description = ''
   agentForm.capabilitiesText = ''
+  agentForm.scheduleEnabled = false
+  agentForm.scheduleCron = ''
+  agentForm.scheduleDescription = ''
   agentForm.configText = '{\n  "model": "gpt-4.1",\n  "timeoutMs": 12000\n}'
 }
 
@@ -186,6 +210,8 @@ function openCreate() {
 }
 
 function openEdit(record) {
+  const config = record.config || {}
+  const schedule = config.schedule || {}
   editingId.value = record.id
   agentForm.name = record.name || ''
   agentForm.code = record.code || ''
@@ -198,7 +224,10 @@ function openEdit(record) {
   agentForm.endpoint = record.endpoint || ''
   agentForm.description = record.description || ''
   agentForm.capabilitiesText = Array.isArray(record.capabilities) ? record.capabilities.join(',') : ''
-  agentForm.configText = JSON.stringify(record.config || {}, null, 2)
+  agentForm.scheduleEnabled = Boolean(schedule.enabled)
+  agentForm.scheduleCron = schedule.cron || ''
+  agentForm.scheduleDescription = schedule.description || ''
+  agentForm.configText = JSON.stringify(config, null, 2)
   formVisible.value = true
 }
 
@@ -210,6 +239,13 @@ async function submitForm() {
   saving.value = true
 
   try {
+    const parsedConfig = agentForm.configText ? JSON.parse(agentForm.configText) : {}
+    parsedConfig.schedule = {
+      enabled: agentForm.scheduleEnabled,
+      cron: agentForm.scheduleCron.trim(),
+      description: agentForm.scheduleDescription.trim(),
+    }
+
     const payload = {
       name: agentForm.name.trim(),
       code: normalizeCode(agentForm.code || agentForm.name),
@@ -225,7 +261,7 @@ async function submitForm() {
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean),
-      config: agentForm.configText ? JSON.parse(agentForm.configText) : {},
+      config: parsedConfig,
     }
 
     if (editingId.value) {

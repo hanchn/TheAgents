@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineComponent, h, markRaw, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { Fragment, computed, defineComponent, h, markRaw, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import { Background } from '@vue-flow/background'
@@ -415,7 +415,7 @@ const EditableEdge = defineComponent({
       const isEditing = editingEdgeId.value === props.id
       const hasLabel = Boolean((props.label || '').trim())
 
-      return h('div', { class: 'workflow-editable-edge' }, [
+      return h(Fragment, null, [
         h(BaseEdge, {
           id: props.id,
           path,

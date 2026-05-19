@@ -509,6 +509,7 @@ select {
 .workflow-edge-label-renderer {
   position: absolute;
   pointer-events: all;
+  z-index: 5;
 }
 
 .workflow-edge-label-chip {

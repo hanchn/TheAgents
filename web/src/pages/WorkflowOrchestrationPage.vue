@@ -70,9 +70,18 @@ const workflowForm = reactive({
   status: 'draft',
 })
 
+const nodeTypeOptions = [
+  { value: 'trigger', label: 'trigger' },
+  { value: 'intent', label: 'intent' },
+  { value: 'ai', label: 'ai' },
+  { value: 'router', label: 'router' },
+  { value: 'tool', label: 'tool' },
+  { value: 'output', label: 'output' },
+]
+
 const nodeForm = reactive({
   label: '',
-  kind: 'task',
+  kind: 'tool',
   prompt: '',
 })
 
@@ -279,7 +288,7 @@ function cancelEditingEdgeLabel() {
 }
 
 function normalizeNode(node) {
-  const kind = node?.data?.kind || 'task'
+  const kind = node?.data?.kind || 'tool'
 
   return {
     ...node,
@@ -730,14 +739,14 @@ function syncNodeForm(node) {
   if (!node) {
     selectedNodeId.value = ''
     nodeForm.label = ''
-    nodeForm.kind = 'task'
+    nodeForm.kind = 'tool'
     nodeForm.prompt = ''
     return
   }
 
   selectedNodeId.value = node.id
   nodeForm.label = node.data?.label || ''
-  nodeForm.kind = node.data?.kind || 'task'
+  nodeForm.kind = node.data?.kind || 'tool'
   nodeForm.prompt = node.data?.prompt || ''
 }
 
@@ -1400,13 +1409,7 @@ onMounted(async () => {
                 <a-select
                   v-model:value="nodeForm.kind"
                   :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
-                  :options="[
-                    { value: 'trigger', label: 'trigger' },
-                    { value: 'ai', label: 'ai' },
-                    { value: 'router', label: 'router' },
-                    { value: 'tool', label: 'tool' },
-                    { value: 'output', label: 'output' },
-                  ]"
+                  :options="nodeTypeOptions"
                 />
               </a-form-item>
               <a-form-item label="节点逻辑">

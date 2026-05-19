@@ -282,9 +282,6 @@ onMounted(loadList)
 <template>
   <div class="page-stack">
     <a-card title="Agent 搜索表单" class="panel-card">
-      <div class="agent-filter-header">
-        <span class="agent-filter-title">查询条件</span>
-      </div>
       <div class="filter-grid">
         <div class="filter-field">
           <span class="filter-field-title">关键字</span>

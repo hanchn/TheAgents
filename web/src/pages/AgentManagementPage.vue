@@ -282,6 +282,9 @@ onMounted(loadList)
 <template>
   <div class="page-stack">
     <a-card title="Agent 搜索表单" class="panel-card">
+      <div class="agent-filter-header">
+        <span class="agent-filter-title">查询条件</span>
+      </div>
       <div class="filter-grid">
         <a-input
           v-model:value="filters.keyword"

@@ -601,6 +601,10 @@ function updateSelectedNode() {
     return
   }
 
+  if (nodeForm.kind === 'start' || nodeForm.kind === 'end') {
+    return message.warning('开始节点和结束节点是初始化系统节点，且只能存在一个')
+  }
+
   flowNodes.value = flowNodes.value.map((node) =>
     node.id === selectedNodeId.value
       ? {
@@ -815,7 +819,7 @@ onMounted(async () => {
                 <div class="workflow-node-card-title" @dblclick.stop="startEditingNodeLabel(id)">
                   <input
                     v-if="editingNodeId === id"
-                    v-model:value="editingNodeLabel"
+                    v-model="editingNodeLabel"
                     class="workflow-node-inline-input"
                     @click.stop
                     @dblclick.stop
@@ -901,8 +905,6 @@ onMounted(async () => {
               v-model:value="nodeForm.kind"
               :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
               :options="[
-                { value: 'start', label: 'start' },
-                { value: 'end', label: 'end' },
                 { value: 'trigger', label: 'trigger' },
                 { value: 'ai', label: 'ai' },
                 { value: 'router', label: 'router' },

@@ -50,6 +50,90 @@ const palette = [
   { label: '输出节点', kind: 'output' },
 ]
 
+function createStartNode() {
+  return {
+    id: 'node-start',
+    type: 'default',
+    position: { x: 80, y: 220 },
+    class: 'workflow-node-start',
+    draggable: false,
+    data: {
+      label: '开始',
+      kind: 'start',
+      prompt: '流程从这里进入。',
+    },
+  }
+}
+
+function createEndNode() {
+  return {
+    id: 'node-end',
+    type: 'default',
+    position: { x: 980, y: 220 },
+    class: 'workflow-node-end',
+    draggable: false,
+    data: {
+      label: '结束',
+      kind: 'end',
+      prompt: '流程在这里结束。',
+    },
+  }
+}
+
+function createDefaultWorkflowDefinition() {
+  return {
+    nodes: [
+      createStartNode(),
+      {
+        id: 'node-intent',
+        type: 'default',
+        position: { x: 340, y: 220 },
+        class: 'workflow-node-default',
+        data: {
+          label: '意图识别',
+          kind: 'intent',
+          prompt: '分析用户输入，识别当前任务类型与约束。',
+        },
+      },
+      {
+        id: 'node-router',
+        type: 'default',
+        position: { x: 620, y: 220 },
+        class: 'workflow-node-default',
+        data: {
+          label: '流程路由',
+          kind: 'router',
+          prompt: '根据业务规则决定进入哪个执行流程。',
+        },
+      },
+      createEndNode(),
+    ],
+    edges: [
+      {
+        id: 'edge-start-intent',
+        source: 'node-start',
+        target: 'node-intent',
+        label: '开始执行',
+        markerEnd: MarkerType.ArrowClosed,
+      },
+      {
+        id: 'edge-intent-router',
+        source: 'node-intent',
+        target: 'node-router',
+        label: '识别完成',
+        markerEnd: MarkerType.ArrowClosed,
+      },
+      {
+        id: 'edge-router-end',
+        source: 'node-router',
+        target: 'node-end',
+        label: '结束流程',
+        markerEnd: MarkerType.ArrowClosed,
+      },
+    ],
+  }
+}
+
 const workflowOptions = computed(() =>
   workflows.value.map((item) => ({
     value: item.id,
@@ -88,6 +172,69 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function normalizeNode(node) {
+  const kind = node?.data?.kind || 'task'
+
+  return {
+    ...node,
+    type: 'default',
+    class:
+      kind === 'start'
+        ? 'workflow-node-start'
+        : kind === 'end'
+          ? 'workflow-node-end'
+          : 'workflow-node-default',
+    draggable: kind !== 'start' && kind !== 'end',
+  }
+}
+
+function ensureSystemNodes(nodes = [], edges = []) {
+  const normalizedNodes = nodes.map((node) => normalizeNode(clone(node)))
+  const nextNodes = normalizedNodes.filter((node) => node.id !== 'node-start' && node.id !== 'node-end')
+  const startNode = normalizedNodes.find((node) => node.id === 'node-start') || createStartNode()
+  const endNode = normalizedNodes.find((node) => node.id === 'node-end') || createEndNode()
+
+  const orderedNodes = [normalizeNode(startNode), ...nextNodes, normalizeNode(endNode)]
+  const validNodeIds = new Set(orderedNodes.map((node) => node.id))
+  let nextEdges = edges
+    .map((edge) => ({
+      ...clone(edge),
+      markerEnd: MarkerType.ArrowClosed,
+    }))
+    .filter((edge) => validNodeIds.has(edge.source) && validNodeIds.has(edge.target))
+    .filter((edge) => edge.target !== 'node-start' && edge.source !== 'node-end')
+
+  const hasStartEdge = nextEdges.some((edge) => edge.source === 'node-start')
+  const hasEndEdge = nextEdges.some((edge) => edge.target === 'node-end')
+  const firstBusinessNode = orderedNodes.find((node) => node.id !== 'node-start' && node.id !== 'node-end')
+  const lastBusinessNode = [...orderedNodes].reverse().find((node) => node.id !== 'node-start' && node.id !== 'node-end')
+
+  if (firstBusinessNode && !hasStartEdge) {
+    nextEdges.unshift({
+      id: `edge-start-${firstBusinessNode.id}`,
+      source: 'node-start',
+      target: firstBusinessNode.id,
+      label: '开始执行',
+      markerEnd: MarkerType.ArrowClosed,
+    })
+  }
+
+  if (lastBusinessNode && !hasEndEdge) {
+    nextEdges.push({
+      id: `edge-${lastBusinessNode.id}-end`,
+      source: lastBusinessNode.id,
+      target: 'node-end',
+      label: '结束流程',
+      markerEnd: MarkerType.ArrowClosed,
+    })
+  }
+
+  return {
+    nodes: orderedNodes,
+    edges: nextEdges,
+  }
+}
+
 function normalizeCode(text) {
   return (text || '')
     .trim()
@@ -111,8 +258,9 @@ function loadWorkflowToCanvas(workflow) {
   workflowForm.code = workflow.code
   workflowForm.description = workflow.description || ''
   workflowForm.status = workflow.status
-  flowNodes.value = clone(workflow.definition?.nodes || [])
-  flowEdges.value = clone(workflow.definition?.edges || [])
+  const normalized = ensureSystemNodes(workflow.definition?.nodes || [], workflow.definition?.edges || [])
+  flowNodes.value = normalized.nodes
+  flowEdges.value = normalized.edges
   syncNodeForm(flowNodes.value[0] || null)
 }
 
@@ -180,14 +328,17 @@ async function loadBindings() {
 }
 
 function addNode(kind) {
-  const index = flowNodes.value.length + 1
+  const businessNodes = flowNodes.value.filter((node) => !['start', 'end'].includes(node.data?.kind))
+  const index = businessNodes.length + 1
+  const endNode = flowNodes.value.find((node) => node.id === 'node-end')
   const node = {
     id: `node-${Date.now()}`,
     type: 'default',
     position: {
-      x: 120 + ((index - 1) % 3) * 240,
-      y: 100 + Math.floor((index - 1) / 3) * 160,
+      x: 320 + ((index - 1) % 2) * 260,
+      y: 120 + Math.floor((index - 1) / 2) * 140,
     },
+    class: 'workflow-node-default',
     data: {
       label: `${kind}-${index}`,
       kind,
@@ -195,13 +346,22 @@ function addNode(kind) {
     },
   }
 
-  flowNodes.value = [...flowNodes.value, node]
+  const nodesWithoutEnd = flowNodes.value.filter((item) => item.id !== 'node-end')
+  flowNodes.value = [...nodesWithoutEnd, node, endNode || createEndNode()]
   syncNodeForm(node)
 }
 
 function onConnect(connection) {
   if (!connection.source || !connection.target) {
     return
+  }
+
+  if (connection.target === 'node-start') {
+    return message.warning('开始节点不能作为连线终点')
+  }
+
+  if (connection.source === 'node-end') {
+    return message.warning('结束节点不能作为连线起点')
   }
 
   flowEdges.value = [
@@ -221,6 +381,24 @@ function onNodeClick(payload) {
 
 function updateSelectedNode() {
   if (!selectedNode.value) {
+    return
+  }
+
+  const nodeKind = selectedNode.value.data?.kind
+  if (nodeKind === 'start' || nodeKind === 'end') {
+    flowNodes.value = flowNodes.value.map((node) =>
+      node.id === selectedNodeId.value
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              label: nodeKind === 'start' ? '开始' : '结束',
+              kind: nodeKind,
+              prompt: nodeForm.prompt,
+            },
+          }
+        : node
+    )
     return
   }
 
@@ -244,6 +422,11 @@ function removeSelectedNode() {
     return
   }
 
+  const nodeKind = selectedNode.value?.data?.kind
+  if (nodeKind === 'start' || nodeKind === 'end') {
+    return message.warning('开始节点和结束节点不允许删除')
+  }
+
   flowNodes.value = flowNodes.value.filter((node) => node.id !== selectedNodeId.value)
   flowEdges.value = flowEdges.value.filter(
     (edge) => edge.source !== selectedNodeId.value && edge.target !== selectedNodeId.value
@@ -258,14 +441,17 @@ async function createNewWorkflow() {
 
   saving.value = true
   try {
+    const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+    flowNodes.value = normalized.nodes
+    flowEdges.value = normalized.edges
     const response = await createWorkflow({
       name: workflowForm.name.trim(),
       code: normalizeCode(workflowForm.code || workflowForm.name),
       description: workflowForm.description.trim(),
       status: workflowForm.status,
       definition: {
-        nodes: clone(flowNodes.value),
-        edges: clone(flowEdges.value),
+        nodes: clone(normalized.nodes),
+        edges: clone(normalized.edges),
       },
     })
 
@@ -286,6 +472,9 @@ async function saveWorkflow({ publish = false } = {}) {
 
   saving.value = true
   try {
+    const normalized = ensureSystemNodes(flowNodes.value, flowEdges.value)
+    flowNodes.value = normalized.nodes
+    flowEdges.value = normalized.edges
     await updateWorkflow(selectedWorkflowId.value, {
       name: workflowForm.name.trim(),
       code: normalizeCode(workflowForm.code || workflowForm.name),
@@ -293,8 +482,8 @@ async function saveWorkflow({ publish = false } = {}) {
       status: publish ? 'published' : workflowForm.status,
       bumpVersion: publish,
       definition: {
-        nodes: clone(flowNodes.value),
-        edges: clone(flowEdges.value),
+        nodes: clone(normalized.nodes),
+        edges: clone(normalized.edges),
       },
     })
 
@@ -354,6 +543,12 @@ watch(selectedWorkflowId, () => {
 
 onMounted(async () => {
   await Promise.all([loadWorkflows(), loadAgents(), loadBindings()])
+  if (!workflows.value.length) {
+    const normalized = createDefaultWorkflowDefinition()
+    flowNodes.value = normalized.nodes
+    flowEdges.value = normalized.edges
+    syncNodeForm(flowNodes.value[0] || null)
+  }
 })
 </script>
 
@@ -449,13 +644,18 @@ onMounted(async () => {
           <div class="workflow-panel-title">节点属性</div>
 
           <a-form-item label="节点标题">
-            <a-input v-model:value="nodeForm.label" :disabled="!selectedNode" />
+            <a-input
+              v-model:value="nodeForm.label"
+              :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
+            />
           </a-form-item>
           <a-form-item label="节点类型">
             <a-select
               v-model:value="nodeForm.kind"
-              :disabled="!selectedNode"
+              :disabled="!selectedNode || ['start', 'end'].includes(selectedNode?.data?.kind)"
               :options="[
+                { value: 'start', label: 'start' },
+                { value: 'end', label: 'end' },
                 { value: 'trigger', label: 'trigger' },
                 { value: 'ai', label: 'ai' },
                 { value: 'router', label: 'router' },

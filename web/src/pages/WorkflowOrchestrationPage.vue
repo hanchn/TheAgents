@@ -1232,7 +1232,16 @@ async function createNewWorkflow() {
 
 async function saveWorkflow({ publish = false } = {}) {
   if (!selectedWorkflowId.value) {
-    return message.warning('请先选择一个流程')
+    if (!workflowForm.name.trim()) {
+      workflowForm.name = '未命名流程'
+    }
+    if (!workflowForm.code.trim()) {
+      workflowForm.code = `workflow-${Date.now()}`
+    }
+    if (publish) {
+      workflowForm.status = 'published'
+    }
+    return createNewWorkflow()
   }
 
   saving.value = true
@@ -1340,7 +1349,6 @@ onMounted(async () => {
                 {{ currentBinding ? '更新绑定' : '绑定流程' }}
               </a-button>
               <a-button @click="layoutNodesHorizontally">流程整理</a-button>
-              <a-button type="primary" :loading="saving" @click="createNewWorkflow">新建流程</a-button>
               <a-button :loading="saving" @click="saveWorkflow()">保存流程</a-button>
               <a-button type="primary" ghost :loading="saving" @click="saveWorkflow({ publish: true })">
                 发布流程
